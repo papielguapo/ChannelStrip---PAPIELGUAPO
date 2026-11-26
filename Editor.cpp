@@ -312,9 +312,8 @@ public:
         auto layout = LookAndFeel_V4::getSliderLayout (slider);
         if (slider.isRotary())
         {
-            const auto b = slider.getLocalBounds();
-            layout.sliderBounds = b;
-            layout.textBoxBounds = Rectangle<int> (2, b.getCentreY() - 10, b.getWidth() - 4, 20);
+            layout.sliderBounds = slider.getLocalBounds();
+            layout.textBoxBounds = {};
         }
         return layout;
     }
@@ -594,19 +593,19 @@ public:
 
 // =========================================================================
 // Functional Rotary Knob (Uniform 52x52 across the entire plugin):
-// - Click & Drag anywhere on the knob (vertical or horizontal) to move it smoothly!
+// - No internal JUCE Label overlay (Slider::NoTextBox) so 100% of the knob area
+//   (exact center, top, bottom, and sides) responds immediately to click & drag!
 // - Scroll Mouse Wheel over the knob to step/adjust the value!
-// - Double-click right mouse button (or double-click) to reset the knob to its default value!
-// - Single right-click or left double-click to type a numeric value directly.
+// - Double-click right mouse button to reset the knob to its default value!
+// - Double-click left mouse button to open an inline numeric editor.
 // =========================================================================
 class ConsoleDial final : public Slider
 {
 public:
     ConsoleDial()
     {
-        // Scale-invariant mouse drag! Uses standard JUCE Slider::mouseDrag with velocity/linear drag across all UI scales
         setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-        setTextBoxStyle (Slider::TextBoxBelow, false, 52, 20);
+        setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
         setDoubleClickReturnValue (false, 0.0);
         setSliderSnapsToMousePosition (false);
         setMouseDragSensitivity (115);
@@ -623,7 +622,7 @@ public:
 
     void resetToDefaultValue()
     {
-        hideTextBox (true);
+        closeInlineEditor();
         if (boundParam != nullptr)
         {
             const float defNorm = boundParam->getDefaultValue();
@@ -644,33 +643,34 @@ public:
 
     void mouseDown (const MouseEvent& e) override
     {
+        closeInlineEditor();
         if (e.mods.isRightButtonDown() || e.mods.isPopupMenu())
         {
             const uint32 nowMs = Time::getMillisecondCounter();
-            if (nowMs - lastRightClickMs <= 420)
+            if (nowMs - lastRightClickMs <= 450)
             {
                 lastRightClickMs = 0;
                 resetToDefaultValue();
                 return;
             }
             lastRightClickMs = nowMs;
-            Slider::mouseDown (e);
-            if (!e.mods.isCommandDown() && !e.mods.isCtrlDown() && !e.mods.isAltDown())
-                showTextBox();
             return;
         }
-        dragStartProp = valueToProportionOfLength (getValue());
-        dragStartPt   = e.position;
+        dragStartProp  = valueToProportionOfLength (getValue());
+        dragStartPt    = e.position;
         isDraggingDial = true;
-        Slider::mouseDown (e);
+        if (boundParam != nullptr)
+            boundParam->beginChangeGesture();
+        if (onDragStart != nullptr)
+            onDragStart();
     }
 
     void mouseDrag (const MouseEvent& e) override
     {
-        if (!isDraggingDial || e.mods.isRightButtonDown())
+        if (!isDraggingDial || e.mods.isRightButtonDown() || e.mods.isPopupMenu())
             return;
-        // e.position is already in local unscaled component coordinates (52x52),
-        // so dragging 100 local units moves full range identically at ANY window scale (0.55x..1.35x)!
+        // e.position is in local unscaled component coordinates (52x52),
+        // so dragging anywhere on the knob (center, top, bottom, sides) moves smoothly across the full range!
         const float sensitivity = e.mods.isShiftDown() ? 360.0f : 105.0f;
         const float dy = e.position.y - dragStartPt.y;
         const float dx = e.position.x - dragStartPt.x;
@@ -679,10 +679,16 @@ public:
         setValue (proportionOfLengthToValue (newProp), sendNotificationSync);
     }
 
-    void mouseUp (const MouseEvent& e) override
+    void mouseUp (const MouseEvent& /*e*/) override
     {
-        isDraggingDial = false;
-        Slider::mouseUp (e);
+        if (isDraggingDial)
+        {
+            isDraggingDial = false;
+            if (onDragEnd != nullptr)
+                onDragEnd();
+            if (boundParam != nullptr)
+                boundParam->endChangeGesture();
+        }
     }
 
     void mouseWheelMove (const MouseEvent& /*e*/, const MouseWheelDetails& wheel) override
@@ -698,9 +704,11 @@ public:
         const double dir = (wheel.isReversed ? -1.0 : 1.0) * (delta > 0.0 ? 1.0 : -1.0);
         const double curProp = valueToProportionOfLength (getValue());
         const double nextProp = std::clamp (curProp + dir * stepProp, 0.0, 1.0);
+        if (boundParam != nullptr) boundParam->beginChangeGesture();
         if (onDragStart != nullptr) onDragStart();
         setValue (proportionOfLengthToValue (nextProp), sendNotificationSync);
         if (onDragEnd != nullptr) onDragEnd();
+        if (boundParam != nullptr) boundParam->endChangeGesture();
     }
 
     void mouseDoubleClick (const MouseEvent& e) override
@@ -711,10 +719,45 @@ public:
             resetToDefaultValue();
             return;
         }
-        showTextBox();
+        openInlineEditor();
     }
 
 private:
+    void openInlineEditor()
+    {
+        closeInlineEditor();
+        inlineEditor = std::make_unique<TextEditor>();
+        inlineEditor->setFont (getFLFont (11.5f, true));
+        inlineEditor->setColour (TextEditor::textColourId, Colours::white);
+        inlineEditor->setColour (TextEditor::backgroundColourId, Colour (0xff121417));
+        inlineEditor->setColour (TextEditor::outlineColourId, kFLAccentOrange);
+        inlineEditor->setColour (TextEditor::focusedOutlineColourId, kFLAccentOrange);
+        inlineEditor->setJustification (Justification::centred);
+        inlineEditor->setBounds (2, getHeight() / 2 - 10, getWidth() - 4, 20);
+        inlineEditor->setText (getTextFromValue (getValue()), false);
+        inlineEditor->selectAll();
+        inlineEditor->onReturnKey = [this]
+        {
+            if (inlineEditor != nullptr)
+            {
+                const String txt = inlineEditor->getText().trim();
+                const double val = getValueFromText (txt);
+                setValue (std::clamp (val, getMinimum(), getMaximum()), sendNotificationSync);
+            }
+            closeInlineEditor();
+        };
+        inlineEditor->onEscapeKey = [this] { closeInlineEditor(); };
+        inlineEditor->onFocusLost = [this] { closeInlineEditor(); };
+        addAndMakeVisible (*inlineEditor);
+        inlineEditor->grabKeyboardFocus();
+    }
+
+    void closeInlineEditor()
+    {
+        inlineEditor.reset();
+    }
+
+    std::unique_ptr<TextEditor> inlineEditor;
     RangedAudioParameter* boundParam = nullptr;
     uint32 lastRightClickMs = 0;
     double dragStartProp = 0.0;
