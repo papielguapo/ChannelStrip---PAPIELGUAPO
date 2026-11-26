@@ -264,10 +264,13 @@ public:
         const double minVal = slider.getMinimum();
         const double maxVal = slider.getMaximum();
         const bool isBipolar = (minVal < -0.001 && maxVal > 0.001 && std::abs (minVal + maxVal) < 1.0);
-        const bool isCyan = (cid == "SSLBlue" || cid == "SSLGreen");
-        const Colour accent = (cid == "SSLRed") ? kFLAccentRed
-                            : isBipolar ? ((slider.getValue() >= 0.0) ? kFLAccentOrange : kFLAccentCyan)
-                            : (isCyan ? kFLAccentCyan : kFLAccentOrange);
+        // Only Blue (kFLAccentCyan) and Yellow/Amber (kFLAccentOrange) for all knobs!
+        // Heat5050 uses 50% Blue on the left half and 50% Yellow on the right half!
+        const bool isHeat5050 = (cid == "Heat5050");
+        const bool isBlueKnob = (cid == "SSLBlue" || cid == "SSLGreen");
+        const Colour accent = isHeat5050
+            ? ((sliderPosProportional < 0.5f) ? kFLAccentCyan : kFLAccentOrange)
+            : (isBlueKnob ? kFLAccentCyan : kFLAccentOrange);
 
         const int numTicks = 21;
         for (int i = 0; i < numTicks; ++i)
@@ -288,18 +291,39 @@ public:
         g.setColour (kFLBevelDark);
         g.strokePath (bgArc, PathStrokeType (trackW + 1.4f, PathStrokeType::curved, PathStrokeType::rounded));
 
-        const float startValAngle = isBipolar
-            ? (rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle))
-            : rotaryStartAngle;
-        if (std::abs (angle - startValAngle) > 0.015f)
+        if (isHeat5050)
         {
-            Path valArc;
-            valArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f,
-                                  std::min (startValAngle, angle), std::max (startValAngle, angle), true);
-            g.setColour (accent.withAlpha (0.25f));
-            g.strokePath (valArc, PathStrokeType (trackW + 4.2f, PathStrokeType::curved, PathStrokeType::rounded));
-            g.setColour (accent);
-            g.strokePath (valArc, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
+            // 50% Blue (left half) + 50% Yellow (right half) dual-color ring for FL HEAT knobs!
+            const float midAngle = rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle);
+            Path leftHalf, rightHalf;
+            leftHalf.addCentredArc (cx, cy, arcRad, arcRad, 0.0f, rotaryStartAngle, midAngle, true);
+            rightHalf.addCentredArc (cx, cy, arcRad, arcRad, 0.0f, midAngle, rotaryEndAngle, true);
+
+            g.setColour (kFLAccentCyan.withAlpha (0.22f));
+            g.strokePath (leftHalf, PathStrokeType (trackW + 3.6f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (kFLAccentCyan.withAlpha (sliderPosProportional < 0.5f ? 1.0f : 0.65f));
+            g.strokePath (leftHalf, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
+
+            g.setColour (kFLAccentOrange.withAlpha (0.22f));
+            g.strokePath (rightHalf, PathStrokeType (trackW + 3.6f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (kFLAccentOrange.withAlpha (sliderPosProportional >= 0.5f ? 1.0f : 0.65f));
+            g.strokePath (rightHalf, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
+        }
+        else
+        {
+            const float startValAngle = isBipolar
+                ? (rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle))
+                : rotaryStartAngle;
+            if (std::abs (angle - startValAngle) > 0.015f)
+            {
+                Path valArc;
+                valArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f,
+                                      std::min (startValAngle, angle), std::max (startValAngle, angle), true);
+                g.setColour (accent.withAlpha (0.25f));
+                g.strokePath (valArc, PathStrokeType (trackW + 4.2f, PathStrokeType::curved, PathStrokeType::rounded));
+                g.setColour (accent);
+                g.strokePath (valArc, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
+            }
         }
 
         g.setColour (Colours::black.withAlpha (0.52f));
@@ -468,51 +492,51 @@ public:
         addAndMakeVisible (canvas);
         canvas.setInterceptsMouseClicks (true, true);
 
-        // 1. HIGH-GAIN INPUT (-24..+48 dB before Input Meter) + FL HEAT (DRIVE & TONE)
-        setupKnob (kInputGain, "preamp",        "SSLSilver");
-        setupKnob (kHeatDrive, "heatDrive",     "SSLRed");
-        setupKnob (kHeatTone,  "heatTone",      "SSLSilver");
+        // 1. HIGH-GAIN INPUT (Yellow) + FL HEAT (50% Blue / 50% Yellow on both!)
+        setupKnob (kInputGain, "preamp",        "SSLYellow");
+        setupKnob (kHeatDrive, "heatDrive",     "Heat5050");
+        setupKnob (kHeatTone,  "heatTone",      "Heat5050");
 
-        // 2. DYNAMICS (COMP): RATIO, THRESHOLD, RELEASE (Fast Attack fixed)
-        setupKnob (kCompRat,   "compRatio",     "SSLSilver");
-        setupKnob (kCompThr,   "compThreshold", "SSLSilver");
-        setupKnob (kCompRel,   "compRelease",   "SSLSilver");
+        // 2. DYNAMICS (COMP): alternating Yellow & Blue
+        setupKnob (kCompRat,   "compRatio",     "SSLYellow");
+        setupKnob (kCompThr,   "compThreshold", "SSLBlue");
+        setupKnob (kCompRel,   "compRelease",   "SSLYellow");
 
-        // 3. GATE / EXPANDER: THRESHOLD, RANGE EXPAND, RELEASE (Fast Attack fixed)
-        setupKnob (kExpThr,    "gateThreshold", "SSLGreen");
-        setupKnob (kExpRng,    "gateRange",     "SSLGreen");
-        setupKnob (kExpRel,    "gateRelease",   "SSLGreen");
+        // 3. GATE / EXPANDER: alternating Blue & Yellow
+        setupKnob (kExpThr,    "gateThreshold", "SSLBlue");
+        setupKnob (kExpRng,    "gateRange",     "SSLYellow");
+        setupKnob (kExpRel,    "gateRelease",   "SSLBlue");
 
-        // 4. FILTERS: HP & LP (2 knobs Hz + 1 button for dB/oct 6, 12, 18, 24)
-        setupKnob (kHpf,       "hpf",           "SSLSilver");
-        setupKnob (kLpf,       "lpf",           "SSLSilver");
+        // 4. FILTERS: HP & LP (2 knobs: 1 Yellow + 1 Blue)
+        setupKnob (kHpf,       "hpf",           "SSLYellow");
+        setupKnob (kLpf,       "lpf",           "SSLBlue");
 
-        // 5. 4-BAND EQ (10 KNOBS: HF dB & Hz, HMF dB, BELL Q & Hz, LMF dB, BELL Q & Hz, LF dB & Hz + 2 BELL BUTTONS)
-        setupKnob (kHfGain,    "highGain",      "SSLRed");
-        setupKnob (kHfFreq,    "highFreq",      "SSLRed");
+        // 5. 4-BAND EQ: Each 2-knob block has 1 Yellow & 1 Blue; Mid rows alternate Yellow / Blue
+        setupKnob (kHfGain,    "highGain",      "SSLYellow");
+        setupKnob (kHfFreq,    "highFreq",      "SSLBlue");
 
-        setupKnob (kMidGain,   "highMidGain",   "SSLGreen");
-        setupKnob (kMidQ,      "highMidQ",      "SSLGreen");
-        setupKnob (kMidFreq,   "highMidFreq",   "SSLGreen");
+        setupKnob (kMidGain,   "highMidGain",   "SSLYellow");
+        setupKnob (kMidQ,      "highMidQ",      "SSLBlue");
+        setupKnob (kMidFreq,   "highMidFreq",   "SSLYellow");
 
         setupKnob (kLmfGain,   "lowMidGain",    "SSLBlue");
-        setupKnob (kLmfQ,      "lowMidQ",       "SSLBlue");
+        setupKnob (kLmfQ,      "lowMidQ",       "SSLYellow");
         setupKnob (kLmfFreq,   "lowMidFreq",    "SSLBlue");
 
-        setupKnob (kLfGain,    "lowGain",       "SSLBrown");
-        setupKnob (kLfFreq,    "lowFreq",       "SSLBrown");
+        setupKnob (kLfGain,    "lowGain",       "SSLYellow");
+        setupKnob (kLfFreq,    "lowFreq",       "SSLBlue");
 
-        // 6. DE-ESSER: 2 KNOBS (FREQ & THRESH) + SSL SPLIT BAND BUTTON
-        setupKnob (kDsFreq,    "dsFreq",        "SSLSilver");
-        setupKnob (kDsThr,     "dsThresh",      "SSLRed");
+        // 6. DE-ESSER: 2 KNOBS (1 Yellow + 1 Blue)
+        setupKnob (kDsFreq,    "dsFreq",        "SSLYellow");
+        setupKnob (kDsThr,     "dsThresh",      "SSLBlue");
 
-        // 7. MID / SIDE dB (from OUTPUT, placed below De-Esser in Column 2!)
-        setupKnob (kMidDb,     "midGain",       "SSLBlue");
+        // 7. MID / SIDE dB: 2 KNOBS (1 Yellow + 1 Blue)
+        setupKnob (kMidDb,     "midGain",       "SSLYellow");
         setupKnob (kSideDb,    "sideGain",      "SSLBlue");
 
-        // 8. INFLATE (ABOVE MASTER FADER in Column 3!): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB BUTTON
-        setupKnob (kInfEff,    "inflateEffect", "SSLRed");
-        setupKnob (kInfCrv,    "inflateCurve",  "SSLSilver");
+        // 8. INFLATE (ABOVE MASTER FADER): 2 KNOBS (1 Yellow + 1 Blue)
+        setupKnob (kInfEff,    "inflateEffect", "SSLYellow");
+        setupKnob (kInfCrv,    "inflateCurve",  "SSLBlue");
 
         // 9. MASTER OUT FADER (Very last stage in DSP, alongside Dual L/R General Meter!)
         fader.setSliderStyle (Slider::LinearVertical);
@@ -547,6 +571,9 @@ public:
 
         // SSL-format De-Esser Split Band button
         setupParamBtn  (bDeEss,   "DE-ESS",   "AmberBtn", "deEss");
+
+        // Warm -128 dBFS Analog Console Noise button below Mid & Side
+        setupParamBtn  (bAnalog,  "ANALOG",   "AmberBtn", "analogNoise");
 
         // OUTPUT Inflate CLIP 0 dB button
         setupParamBtn  (bClip0,   "CLIP 0",   "RedBtn",   "inflateClip");
@@ -784,9 +811,10 @@ private:
         kDsThr.setBounds   (302, 592, 52, 52);
         bDeEss.setBounds   (262, 696, btnW, btnH);
 
-        // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915)!
-        kMidDb.setBounds   (214, 782, 56, 56);
-        kSideDb.setBounds  (300, 782, 56, 56);
+        // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915) + ANALOG (-128 dB) button!
+        kMidDb.setBounds   (214, 772, 54, 54);
+        kSideDb.setBounds  (302, 772, 54, 54);
+        bAnalog.setBounds  (262, 868, btnW, btnH);
 
         // =====================================================================
         // COLUMN 3 (x = 384..540):
@@ -953,13 +981,13 @@ private:
         g.setFont (getFLFont (8.2f, true));
         g.drawText ("FAST ATK", 26, 630, 62, 12, Justification::centredLeft);
 
-        // EXP / GATE LEDs
+        // EXP / GATE LEDs perfectly aligned vertically with the 5-LED columns below (x = 120.0f & 158.0f)!
         const int gMode = roundToInt (state.getRawParameterValue ("gateMode")->load());
         g.setColour (silkCol);
         g.setFont (getFLFont (8.5f, true));
-        g.drawText ("EXP", 112, 544, 28, 11, Justification::centred);
+        g.drawText ("EXP",  106, 544, 28, 11, Justification::centred);
         g.drawText ("GATE", 142, 544, 32, 11, Justification::centred);
-        drawIndicatorLed (g, 126.0f, 560.0f, 7.0f, kLedAmber, gMode == 1);
+        drawIndicatorLed (g, 120.0f, 560.0f, 7.0f, kLedAmber, gMode == 1);
         drawIndicatorLed (g, 158.0f, 560.0f, 7.0f, kLedAmber, gMode == 0);
 
         // Dual 5-LED Gain Reduction & Gate Attenuation Ladders (3, 6, 10, 14, 20 dB)
@@ -1043,9 +1071,10 @@ private:
         drawIndicatorLed (g, 288.0f, 682.0f, 7.8f,
                           dsGr > 0.2f ? kLedRed : kFLAccentCyan, bDeEss.getToggleState());
 
-        // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser!
+        // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser + ANALOG -128 dB LED!
         drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
         drawDialRingAndLabels (g, kSideDb, {}, "SIDE dB");
+        drawIndicatorLed (g, 248.0f, 879.0f, 7.2f, kFLAccentOrange, bAnalog.getToggleState());
 
         // =====================================================================
         // COLUMN 3: INFLATE (ABOVE FADER), MASTER FADER + DUAL L/R GENERAL METER,
@@ -1188,7 +1217,7 @@ private:
     TextButton bLink, bExpSel, bDynIn, bExpIn, bCmpIn;
     TextButton bSlope;
     TextButton bHfBell, bEqSel, bLfBell, bEqIn, bEqSc, bEqPre;
-    TextButton bDeEss;
+    TextButton bDeEss, bAnalog;
     TextButton bClip0, bInOutMeter, bMeterScale;
 
     bool showPreHeatInputMeter = false;
@@ -1221,16 +1250,25 @@ void renderSurcoEditorSnapshot (const File& outPng)
         if (nm == "Input trim")      p->setValueNotifyingHost (0.45f);
         if (nm == "Heat Drive")      p->setValueNotifyingHost (0.72f);
         if (nm == "Heat Tone")       p->setValueNotifyingHost (0.62f);
+        if (nm == "Compressor ratio")     p->setValueNotifyingHost (0.52f);
+        if (nm == "Compressor threshold") p->setValueNotifyingHost (0.65f);
+        if (nm == "Compressor release")   p->setValueNotifyingHost (0.48f);
+        if (nm == "Gate range")           p->setValueNotifyingHost (0.50f);
+        if (nm == "Gate threshold")       p->setValueNotifyingHost (0.55f);
+        if (nm == "Gate release")         p->setValueNotifyingHost (0.45f);
+        if (nm == "High pass")            p->setValueNotifyingHost (0.42f);
+        if (nm == "Low pass")             p->setValueNotifyingHost (0.68f);
         if (nm == "Inflate Effect")  p->setValueNotifyingHost (0.58f);
         if (nm == "Inflate Curve")   p->setValueNotifyingHost (0.65f);
         if (nm == "High shelf gain") p->setValueNotifyingHost (0.68f);
         if (nm == "High mid gain")   p->setValueNotifyingHost (0.61f);
-        if (nm == "Low mid gain")    p->setValueNotifyingHost (0.39f);
+        if (nm == "Low mid gain")    p->setValueNotifyingHost (0.64f);
         if (nm == "Low shelf gain")  p->setValueNotifyingHost (0.58f);
         if (nm == "De-Ess")          p->setValueNotifyingHost (1.0f);
+        if (nm == "Analog Noise")    p->setValueNotifyingHost (1.0f);
         if (nm == "Clip 0 dB")       p->setValueNotifyingHost (1.0f);
-        if (nm == "Mid Gain")        p->setValueNotifyingHost (0.60f);
-        if (nm == "Side Gain")       p->setValueNotifyingHost (0.58f);
+        if (nm == "Mid Gain")        p->setValueNotifyingHost (0.62f);
+        if (nm == "Side Gain")       p->setValueNotifyingHost (0.64f);
     }
     AudioBuffer<float> buf (2, 256);
     MidiBuffer midi;

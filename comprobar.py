@@ -108,14 +108,19 @@ side_out = 0.5 * (stereo_out[0] - stereo_out[1])
 assert np.linalg.norm(side_out) > np.linalg.norm(mid_out) * 5.0
 print("[PASS] Módulo 6: Matriz Mid/Side de OUTPUT verificada")
 
-# 9. Auditoría OUTPUT Inflate + Clip 0 dB + Output Fader
+# 9. Auditoría OUTPUT Inflate + Clip 0 dB + Output Fader + ANALOG Noise (-128 dBFS)
 inf0 = np.linalg.norm(render(440, 0.25))
 inf100 = np.linalg.norm(render(440, 0.25, inflate_effect=100, inflate_curve=25))
 assert inf100 > inf0 * 1.35
 clipped = render(440, 0.9, input_trim=12, clip_0_db=True)
 assert np.max(np.abs(clipped)) <= 1.0001
 assert abs(db(1000, output_fader=-6) + 6) < 0.05
-print(f"[PASS] Módulo 7: OUTPUT Inflate (+{20*np.log10(inf100/inf0):.2f} dB), Clip 0 dB (max {np.max(np.abs(clipped)):.4f}) y Fader verificados")
+fx_noise = configured(dict(analog_noise=True))
+silence = np.zeros((2, 48000), dtype=np.float32)
+noise_out = fx_noise.process(silence, 48000)[:, 4000:]
+noise_rms_db = 20 * np.log10(np.sqrt(np.mean(noise_out ** 2)))
+assert -131.5 <= noise_rms_db <= -124.5
+print(f"[PASS] Módulo 7: OUTPUT Inflate (+{20*np.log10(inf100/inf0):.2f} dB), Clip 0 dB (max {np.max(np.abs(clipped)):.4f}), Analog Noise ({noise_rms_db:.2f} dBFS RMS) y Fader verificados")
 
 # =========================================================================
 # Generación de Gráficas de Auditoría DSP en docs/DSP_Audit_Plots.png (con PIL)

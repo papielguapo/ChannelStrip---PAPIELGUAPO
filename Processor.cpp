@@ -16,7 +16,7 @@ enum Param {
     phaseInv, pad20, hfBell, lfBell, eqIn, eqPreDyn, eqDynSc, dynIn, expIn, cmpIn,
     fltDynSc, fltPreDyn, filterSlope, dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor,
     heatDrive, heatTone, heatBypass, midGain, sideGain, inflateEffect, inflateCurve, inflateClip,
-    oversampling, count
+    oversampling, analogNoise, count
 };
 
 constexpr const char* ids[] = {
@@ -27,7 +27,7 @@ constexpr const char* ids[] = {
     "phaseInv","pad20","hfBell","lfBell","eqIn","eqPreDyn","eqDynSc","dynIn","expIn","cmpIn",
     "fltDynSc","fltPreDyn","filterSlope","dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor",
     "heatDrive","heatTone","heatBypass","midGain","sideGain","inflateEffect","inflateCurve","inflateClip",
-    "oversampling"
+    "oversampling","analogNoise"
 };
 static_assert (std::size (ids) == count);
 
@@ -120,6 +120,7 @@ State::ParameterLayout layout()
     add (inflateCurve,  "Inflate Curve", -50.0f, 50.0f, 0.0f, "");
     flag (inflateClip,  "Clip 0 dB", false);
     choice (oversampling, "Oversampling", { "1x Native", "2x OS", "4x OS", "8x OS" }, 0);
+    flag (analogNoise,  "Analog Noise", false);
 
     return result;
 }
@@ -438,6 +439,51 @@ struct OutputInflator
     }
 };
 
+// =========================================================================
+// Warm Studio Console Pink/Tape Analog Noise Floor calibrated to -128 dBFS RMS
+// Uses Paul Kellet's 3-pole pinking filter + gentle high-frequency silk rolloff
+// with independent decorrelated L/R xorshift64* generators.
+// =========================================================================
+struct WarmAnalogNoise
+{
+    uint64_t seed[2] { 0x6A09E667F3BCC908ULL, 0xBB67AE8584CAA73BULL };
+    double b0[2]{}, b1[2]{}, b2[2]{}, lp[2]{};
+
+    void reset() noexcept
+    {
+        b0[0] = b0[1] = b1[0] = b1[1] = b2[0] = b2[1] = lp[0] = lp[1] = 0.0;
+    }
+
+    inline double nextWhite (int ch) noexcept
+    {
+        uint64_t x = seed[ch & 1];
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        seed[ch & 1] = x;
+        const uint64_t u = (x * 0x2545F4914F6CDD1DULL) >> 11;
+        return (static_cast<double> (u) * (1.0 / 9007199254740992.0)) * 2.0 - 1.0;
+    }
+
+    inline double tick (int ch) noexcept
+    {
+        const int c = ch & 1;
+        // Triangular PDF dithered white excitation
+        const double w = 0.5 * (nextWhite (c) + nextWhite (c));
+        // Paul Kellet 3-pole 1/f pinking network for organic console warmth
+        b0[c] = 0.99765 * b0[c] + w * 0.0990460;
+        b1[c] = 0.96300 * b1[c] + w * 0.2965164;
+        b2[c] = 0.57000 * b2[c] + w * 1.0526913;
+        const double pink = b0[c] + b1[c] + b2[c] + w * 0.1848;
+        // Gentle analog tape/transformer top-end silk smoothing
+        lp[c] = 0.62 * lp[c] + 0.38 * pink;
+        // Normalized to exact -128.00 dBFS RMS (10^(-128/20) = 3.9810717055e-7; raw lp RMS is 1.1355)
+        constexpr double kTargetRms128dB = 3.981071705534973e-7;
+        constexpr double kPinkRmsNorm    = 1.0 / 1.1355;
+        return lp[c] * (kTargetRms128dB * kPinkRmsNorm);
+    }
+};
+
 class Strip final : public juce::AudioProcessor
 {
 public:
@@ -603,6 +649,7 @@ public:
         const double targetInfEffect = double(v[inflateEffect]) / 100.0;
         const double targetInfCurve  = (double(v[inflateCurve]) + 50.0) / 100.0;
         const bool clip0dB           = v[inflateClip] > 0.5f;
+        const bool analogOn          = v[analogNoise] > 0.5f;
         const bool msActive          = (std::abs(v[midGain]) > 0.001f || std::abs(v[sideGain]) > 0.001f
                                      || midSmoothed.isSmoothing() || sideSmoothed.isSmoothing());
 
@@ -711,6 +758,8 @@ public:
             for (int ch=0;ch<channels;++ch)
             {
                 double y = outCh[ch];
+                if (analogOn)
+                    y += warmNoise.tick(ch);
                 if (targetInfEffect > 0.0001 || inflator.effectCurrent > 0.0001 || clip0dB)
                     y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
                 // Master Fader Out is the VERY LAST stage before the OUT meter!
@@ -773,6 +822,7 @@ private:
     flheat::HeatDSP flHeatDsp{};
     VocalsDeEsser vocalsDeEsser{};
     OutputInflator inflator{};
+    WarmAnalogNoise warmNoise{};
     juce::SmoothedValue<double> trim,output,heat,midSmoothed,sideSmoothed;
     double fs=44100,reduction=0,attenuation=0,power=0;
 };
