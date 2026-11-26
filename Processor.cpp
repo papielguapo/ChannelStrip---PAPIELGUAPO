@@ -97,7 +97,7 @@ State::ParameterLayout layout()
     flag (cmpIn, "Compressor In", true);
     flag (fltDynSc, "Filters Dyn SC", false);
     flag (fltPreDyn, "Filters Pre Dyn", true);
-    choice (filterSlope, "Filter slope", { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct" }, 1);
+    choice (filterSlope, "Filter slope", { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct" }, 2);
 
     // Vocals De-Esser Stage parameters
     add (dsFreq, "DeEsser Freq", 3000.0f, 12000.0f, 6200.0f, "Hz", true);
@@ -176,23 +176,23 @@ struct SlopeFilter
     void tune (int type, double hz, int slopeIdx, double fs) noexcept
     {
         slopeOrder = std::clamp (slopeIdx, 0, 3);
-        if (slopeOrder == 0)
+        if (slopeOrder == 0) // 6 dB/oct (1st-order RC)
         {
             stageA.tuneFirstOrder (type, hz, fs);
         }
-        else if (slopeOrder == 1)
+        else if (slopeOrder == 1) // 12 dB/oct SSL Brown-style (Q = 0.78 slight analog knee punch)
         {
-            stageA.tune (type, hz, 0.70710678, 0.0, fs);
+            stageA.tune (type, hz, 0.78, 0.0, fs);
         }
-        else if (slopeOrder == 2)
+        else if (slopeOrder == 2) // 18 dB/oct SSL E-Series style (3-pole active Sallen-Key Q = 0.84 + 1st-order pole, identical slope on HP & LP!)
         {
-            stageA.tune (type, hz, 1.0, 0.0, fs);
+            stageA.tune (type, hz, 0.84, 0.0, fs);
             stageB.tuneFirstOrder (type, hz, fs);
         }
-        else
+        else // 24 dB/oct SSL G-Series style (4-pole cascade with warm analog knee, identical on HP & LP!)
         {
-            stageA.tune (type, hz, 0.54119610, 0.0, fs);
-            stageB.tune (type, hz, 1.30656296, 0.0, fs);
+            stageA.tune (type, hz, 0.56, 0.0, fs);
+            stageB.tune (type, hz, 1.34, 0.0, fs);
         }
     }
 
@@ -535,9 +535,24 @@ public:
         const double hfGain = v[hfBell]>0.5f ? std::round(double(v[highGain])) : double(v[highGain]);
         const double eq[]={0,0,lfGain,v[lowMidGain],v[highMidGain],hfGain};
         const bool brownEQ=v[eqMode]>0.5f;
-        const double shelfSlope=brownEQ ? 0.60 : 1.0, bellScale=brownEQ ? 0.70 : 1.0;
+        // Super-musical SSL 242 Black & 02 Brown proportional-Q & shelf shaping:
+        // Small boosts/cuts stay wide, silky and phase-smooth; deeper boosts/cuts focus Q musically!
+        auto musicalBellQ = [brownEQ](double userQ, double gainDb) noexcept -> double
+        {
+            const double absG = std::abs(gainDb);
+            const double propFactor = brownEQ ? (0.58 + 0.032 * absG) : (0.76 + 0.024 * absG);
+            return std::clamp(userQ * propFactor, 0.25, 10.0);
+        };
+        const double shelfSlope = brownEQ ? 0.58 : 0.90;
         const int types[]={0,1,v[lfBell]>0.5f ? 3 : 2,3,4,v[hfBell]>0.5f ? 4 : 5};
-        const double q[]={0.70710678,0.70710678,v[lfBell]>0.5f ? 1.0*bellScale : shelfSlope,v[lowMidQ]*bellScale,v[highMidQ]*bellScale,v[hfBell]>0.5f ? 1.0*bellScale : shelfSlope};
+        const double q[]={
+            0.70710678,
+            0.70710678,
+            v[lfBell]>0.5f ? musicalBellQ(0.95, lfGain) : shelfSlope,
+            musicalBellQ(v[lowMidQ], v[lowMidGain]),
+            musicalBellQ(v[highMidQ], v[highMidGain]),
+            v[hfBell]>0.5f ? musicalBellQ(0.95, hfGain) : shelfSlope
+        };
         const bool eqActive = v[eqIn]>0.5f;
         const bool fltInSc = v[fltDynSc]>0.5f;
         const bool eqInSc = eqActive && v[eqDynSc]>0.5f;
@@ -656,12 +671,13 @@ public:
             const double gate=!expActive || level>=v[gateThreshold] ? 0.0 : (v[gateMode]<0.5f ? double(v[gateRange]) : std::min(double(v[gateRange]),v[gateThreshold]-level));
             reduction=target+(target>reduction ? ca : cr)*(reduction-target);
             attenuation=gate+(gate<attenuation ? ga : gr)*(attenuation-gate);
-            const auto g=output.getNextValue()*gain(-attenuation-reduction);
+            const double dynGain = gain(-attenuation-reduction);
+            const auto faderGain = output.getNextValue();
 
             double outCh[2]{};
             for (int ch=0;ch<channels;++ch)
             {
-                double y = g * x[ch];
+                double y = dynGain * x[ch];
                 if (!fltPre && !fltInSc)
                 {
                     if (on[0]) y=hpSlope.tick(ch,y);
@@ -693,6 +709,8 @@ public:
                 double y = outCh[ch];
                 if (targetInfEffect > 0.0001 || inflator.effectCurrent > 0.0001 || clip0dB)
                     y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
+                // Master Fader Out is the VERY LAST stage before the OUT meter!
+                y *= faderGain;
                 const float absY = float(std::abs(y));
                 blkOutPeak = std::max(blkOutPeak, absY);
                 if (ch == 0) { blkOutL = std::max(blkOutL, absY); sumSqOutL += y * y; }

@@ -97,7 +97,19 @@ void drawIndicatorLed (Graphics& g, float cx, float cy, float diameter, Colour c
 void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noexcept
 {
     Path p;
-    if (type == 2) // High-pass slope
+    if (type == 0) // Narrow bell
+    {
+        p.startNewSubPath (cx - 6.0f, cy + 2.5f);
+        p.lineTo (cx - 2.5f, cy + 2.5f);
+        p.quadraticTo (cx, cy - 5.0f, cx + 2.5f, cy + 2.5f);
+        p.lineTo (cx + 6.0f, cy + 2.5f);
+    }
+    else if (type == 1) // Wide bell
+    {
+        p.startNewSubPath (cx - 6.5f, cy + 2.5f);
+        p.quadraticTo (cx, cy - 4.5f, cx + 6.5f, cy + 2.5f);
+    }
+    else if (type == 2) // High-pass slope
     {
         p.startNewSubPath (cx - 7.0f, cy + 3.5f);
         p.lineTo (cx - 2.0f, cy - 3.0f);
@@ -111,77 +123,6 @@ void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noex
     }
     g.setColour (col);
     g.strokePath (p, PathStrokeType (1.3f));
-}
-
-void drawStereoMiniMeter (Graphics& g, Rectangle<float> area, float dbL, float dbR, bool isInputMode, bool isVuCalibrated) noexcept
-{
-    g.setColour (Colour (0xff121417));
-    g.fillRoundedRectangle (area, 3.0f);
-    g.setColour (Colour (0xff2c3136));
-    g.drawRoundedRectangle (area, 3.0f, 0.9f);
-
-    const int numSegs = 12;
-    const float padTop = 14.0f;
-    const float padBot = 14.0f;
-    const float barTop = area.getY() + padTop;
-    const float barH   = area.getHeight() - padTop - padBot;
-    const float colW   = (area.getWidth() - 10.0f) * 0.5f;
-    const float xL     = area.getX() + 3.5f;
-    const float xR     = xL + colW + 3.0f;
-
-    g.setColour (isVuCalibrated ? kFLAccentOrange : (isInputMode ? kFLAccentCyan : kFLAccentGreen));
-    g.setFont (getFLFont (7.2f, true));
-    const String topTag = String (isInputMode ? "IN" : "OUT") + (isVuCalibrated ? " VU" : " PK");
-    g.drawText (topTag, Rectangle<float> (area.getX(), area.getY() + 1.5f, area.getWidth(), 10.0f),
-                Justification::centred, false);
-
-    // In -18 dBFS RMS (VU) mode, 0 VU is at 75% height (-18 dBFS -> 0 VU, +6 VU = -12 dBFS at top)
-    auto dbToNorm = [isVuCalibrated] (float db) noexcept -> float
-    {
-        if (isVuCalibrated)
-            return std::clamp ((db + 30.0f) / 36.0f, 0.0f, 1.0f); // db is already in VU (dBFS + 18)
-        return std::clamp ((db + 48.0f) / 48.0f, 0.0f, 1.0f);
-    };
-
-    const float gap  = 1.6f;
-    const float segH = (barH - (numSegs - 1) * gap) / static_cast<float> (numSegs);
-    const float nL   = dbToNorm (dbL);
-    const float nR   = dbToNorm (dbR);
-
-    auto drawCol = [&] (float bx, float normVal)
-    {
-        for (int i = 0; i < numSegs; ++i)
-        {
-            const float segNorm = static_cast<float> (i + 1) / static_cast<float> (numSegs);
-            const int invIdx    = numSegs - 1 - i;
-            const float sy      = barTop + invIdx * (segH + gap);
-
-            Colour onCol  = isInputMode ? kFLAccentCyan : kFLAccentGreen;
-            Colour offCol = Colour (0xff1a1f22);
-            if (invIdx == 0)      { onCol = kFLAccentRed;    offCol = Colour (0xff2c1618); }
-            else if (invIdx <= 2) { onCol = kFLAccentOrange; offCol = Colour (0xff2c2216); }
-
-            const bool lit = (normVal >= segNorm - 0.03f);
-            g.setColour (lit ? onCol : offCol);
-            g.fillRect (bx, sy, colW, segH);
-        }
-    };
-
-    drawCol (xL, nL);
-    drawCol (xR, nR);
-
-    // Draw 0 VU (-18 dBFS sweet-spot target line) when in calibrated RMS mode!
-    if (isVuCalibrated)
-    {
-        const float zeroVuY = barTop + (1.0f - dbToNorm (0.0f)) * barH;
-        g.setColour (Colours::white.withAlpha (0.85f));
-        g.drawHorizontalLine (roundToInt (zeroVuY), area.getX() + 1.5f, area.getRight() - 1.5f);
-    }
-
-    g.setColour (kFLTextMuted);
-    g.setFont (getFLFont (7.5f, true));
-    g.drawText ("L", Rectangle<float> (xL - 1.0f, area.getBottom() - 12.0f, colW + 2.0f, 10.0f), Justification::centred, false);
-    g.drawText ("R", Rectangle<float> (xR - 1.0f, area.getBottom() - 12.0f, colW + 2.0f, 10.0f), Justification::centred, false);
 }
 
 Image createFLHeatBackdrop (int w, int h)
@@ -227,16 +168,15 @@ Image createFLHeatBackdrop (int w, int h)
     drawFLCard ({ 5.0f, 198.0f, col1W - 10.0f, 514.0f }, "DYNAMICS & GATE (FAST ATK)", kFLAccentCyan);
     drawFLCard ({ 5.0f, 717.0f, col1W - 10.0f, 198.0f }, "FILTERS (HP / LP + dB/OCT)", kFLAccentCyan);
 
-    // Column 2: 6-Knob EQ (HF, MID, LF + 2 Bell buttons), De-Esser (Split Band)
-    drawFLCard ({ col1W + 5.0f, 5.0f, col2W - 10.0f, 710.0f }, "EQ (HF / MID / LF)", kFLAccentOrange);
-    drawFLCard ({ col1W + 5.0f, 720.0f, col2W - 10.0f, 195.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed);
+    // Column 2: Compact 6-Knob EQ (HF, MID, LF + 2 Bell buttons), De-Esser (Split Band), and MID / SIDE below De-Esser!
+    drawFLCard ({ col1W + 5.0f, 5.0f,   col2W - 10.0f, 520.0f }, "EQ (HF / MID / LF)", kFLAccentOrange);
+    drawFLCard ({ col1W + 5.0f, 530.0f, col2W - 10.0f, 196.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed);
+    drawFLCard ({ col1W + 5.0f, 731.0f, col2W - 10.0f, 184.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan);
 
-    // Column 3: Header (ChannelStrip + papielguapo signature), INFLATE (above Master Fader!), MID/SIDE, MASTER FADER & OUTPUT + L/R METERS
-    drawFLCard ({ col3X + 5.0f, 5.0f, col3W - 10.0f, 118.0f }, "", kFLAccentOrange);
-    drawFLCard ({ col3X + 5.0f, 128.0f, col3W - 10.0f, 134.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange);
-    drawFLCard ({ col3X + 5.0f, 267.0f, col3W - 10.0f, 102.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan);
-    drawFLCard ({ col3X + 5.0f, 374.0f, col3W - 10.0f, 408.0f }, "MASTER FADER & METER", kFLAccentGreen);
-    drawFLCard ({ col3X + 5.0f, 787.0f, col3W - 10.0f, 128.0f }, "OUTPUT TRIM & L/R METER", kFLAccentOrange);
+    // Column 3: Header (ChannelStrip + papielguapo signature), INFLATE (above Master Fader!), and full-height MASTER FADER + DUAL L/R METER!
+    drawFLCard ({ col3X + 5.0f, 5.0f,   col3W - 10.0f, 122.0f }, "", kFLAccentOrange);
+    drawFLCard ({ col3X + 5.0f, 132.0f, col3W - 10.0f, 154.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange);
+    drawFLCard ({ col3X + 5.0f, 291.0f, col3W - 10.0f, 624.0f }, "MASTER OUT & L/R METER", kFLAccentCyan);
 
     g.setColour (Colour (0xff0b0d10));
     g.drawRect (0, 0, w, h, 1);
@@ -386,7 +326,7 @@ public:
         g.fillRoundedRectangle (fill, 2.0f);
 
         const float capW = 34.0f;
-        const float capH = 48.0f;
+        const float capH = 52.0f;
         const Rectangle<float> cap (cx - capW * 0.5f,
                                     std::clamp (clampedPos - capH * 0.5f, trackTop - 12.0f, trackBot - capH + 12.0f),
                                     capW, capH);
@@ -533,11 +473,12 @@ public:
         setupKnob (kHpf,       "hpf",           "SSLSilver");
         setupKnob (kLpf,       "lpf",           "SSLSilver");
 
-        // 5. EQ (6 KNOBS: HF dB & Hz, MID dB & Hz, LF dB & Hz + 2 BELL BUTTONS)
+        // 5. COMPACT EQ (7 KNOBS: HF dB & Hz, MID dB, Q/BELL & Hz, LF dB & Hz + 2 BELL BUTTONS)
         setupKnob (kHfGain,    "highGain",      "SSLRed");
         setupKnob (kHfFreq,    "highFreq",      "SSLRed");
 
         setupKnob (kMidGain,   "highMidGain",   "SSLGreen");
+        setupKnob (kMidQ,      "highMidQ",      "SSLGreen");
         setupKnob (kMidFreq,   "highMidFreq",   "SSLGreen");
 
         setupKnob (kLfGain,    "lowGain",       "SSLBrown");
@@ -547,17 +488,15 @@ public:
         setupKnob (kDsFreq,    "dsFreq",        "SSLSilver");
         setupKnob (kDsThr,     "dsThresh",      "SSLRed");
 
-        // 7. INFLATE (ABOVE MASTER FADER!): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB BUTTON
-        setupKnob (kInfEff,    "inflateEffect", "SSLRed");
-        setupKnob (kInfCrv,    "inflateCurve",  "SSLSilver");
-
-        // 8. MID / SIDE dB (from OUTPUT)
+        // 7. MID / SIDE dB (from OUTPUT, placed below De-Esser in Column 2!)
         setupKnob (kMidDb,     "midGain",       "SSLBlue");
         setupKnob (kSideDb,    "sideGain",      "SSLBlue");
 
-        // 9. OUTPUT TRIM & MASTER FADER
-        setupKnob (kOutput,    "compMakeup",    "SSLSilver");
+        // 8. INFLATE (ABOVE MASTER FADER in Column 3!): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB BUTTON
+        setupKnob (kInfEff,    "inflateEffect", "SSLRed");
+        setupKnob (kInfCrv,    "inflateCurve",  "SSLSilver");
 
+        // 9. MASTER OUT FADER (Very last stage in DSP, alongside Dual L/R General Meter!)
         fader.setSliderStyle (Slider::LinearVertical);
         fader.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
         fader.setDoubleClickReturnValue (true, 0.0);
@@ -594,7 +533,7 @@ public:
         // OUTPUT Inflate CLIP 0 dB button
         setupParamBtn  (bClip0,   "CLIP 0 dB",     "RedBtn",   "inflateClip");
 
-        // IN / OUT Meter Selector Button (switches between Pre-HEAT Input and Final Output)
+        // General Dual L/R Meter IN / OUT Selector (IN = Pre-HEAT Input, OUT = Final Post-Fader Output)
         setupActionBtn (bInOutMeter, "METER: OUT", "CyanBtn", [this]
         {
             showPreHeatInputMeter = !showPreHeatInputMeter;
@@ -742,7 +681,7 @@ private:
     void layoutCanvasControls()
     {
         constexpr int knobSz = 62;
-        constexpr int smKnob = 48;
+        constexpr int eqKnob = 54;
 
         // =====================================================================
         // COLUMN 1 (x = 0..192):
@@ -783,56 +722,54 @@ private:
 
         // =====================================================================
         // COLUMN 2 (x = 192..384):
-        // - EQ 6 KNOBS: HF (dB, Hz), MID (dB, Hz), LF (dB, Hz)
-        // - 2 BELL BUTTONS (HF CAMPANA, LF CAMPANA) + CURVA BLK/BRN
-        // - DE-ESS: 2 KNOBS (FREQ, THRESH) + 1 SSL SPLIT BAND BUTTON
+        // - COMPACT EQ 6 KNOBS: HF (dB, Hz), MID (dB, Hz), LF (dB, Hz) + 2 BELL BUTTONS
+        // - DE-ESSER: 2 KNOBS (FREQ, THRESH) + 1 SSL SPLIT BAND BUTTON
+        // - MID / SIDE dB (from OUTPUT): 2 KNOBS BELOW DE-ESSER!
         // =====================================================================
-        // HF Band (2 knobs: Gain dB & Freq Hz + 1 Bell button)
-        kHfGain.setBounds (208, 36, knobSz, knobSz);
-        bHfBell.setBounds (288, 46, 82, 24);
-        kHfFreq.setBounds (294, 102, knobSz, knobSz);
+        // HF Band (Compact row: HF dB & HF kHz side-by-side + HF CAMPANA button)
+        kHfGain.setBounds  (212, 32, eqKnob, eqKnob);
+        kHfFreq.setBounds  (302, 32, eqKnob, eqKnob);
+        bHfBell.setBounds  (242, 108, 92, 22);
 
-        // MID Band (2 knobs: Gain dB & Freq Hz + Black/Brown Curve button)
-        kMidGain.setBounds (208, 228, knobSz, knobSz);
-        bEqSel.setBounds   (286, 244, 86, 24);
-        kMidFreq.setBounds (294, 304, knobSz, knobSz);
+        // MID Band (3 knobs side-by-side: MID dB, BELL Q, MID kHz + CURVA BLK/BRN button)
+        kMidGain.setBounds (200, 166, 50, 50);
+        kMidQ.setBounds    (263, 166, 50, 50);
+        kMidFreq.setBounds (326, 166, 50, 50);
+        bEqSel.setBounds   (240, 242, 96, 22);
 
-        // LF Band (2 knobs: Gain dB & Freq Hz + 1 Bell button)
-        kLfFreq.setBounds  (294, 448, knobSz, knobSz);
-        kLfGain.setBounds  (208, 504, knobSz, knobSz);
-        bLfBell.setBounds  (288, 540, 82, 24);
+        // LF Band (Compact row: LF dB & LF Hz side-by-side + LF CAMPANA button)
+        kLfGain.setBounds  (212, 314, eqKnob, eqKnob);
+        kLfFreq.setBounds  (302, 314, eqKnob, eqKnob);
+        bLfBell.setBounds  (242, 390, 92, 22);
 
         // Equaliser routing buttons
-        bEqIn.setBounds    (206, 646, 52, 34);
-        bEqSc.setBounds    (262, 646, 52, 34);
-        bEqPre.setBounds   (318, 646, 52, 34);
+        bEqIn.setBounds    (206, 446, 52, 34);
+        bEqSc.setBounds    (262, 446, 52, 34);
+        bEqPre.setBounds   (318, 446, 52, 34);
 
-        // DE-ESS Section: 2 Knobs (FREQ & THRESH) + 1 SSL Format SPLIT BAND Button
-        kDsFreq.setBounds  (214, 756, knobSz, knobSz);
-        kDsThr.setBounds   (298, 756, knobSz, knobSz);
-        bDeEss.setBounds   (234, 858, 108, 34);
+        // DE-ESS Section (y = 530..726): 2 Knobs (FREQ & THRESH) + 1 SSL Format SPLIT BAND Button
+        kDsFreq.setBounds  (214, 560, eqKnob, eqKnob);
+        kDsThr.setBounds   (302, 560, eqKnob, eqKnob);
+        bDeEss.setBounds   (234, 658, 108, 32);
+
+        // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 731..915)!
+        kMidDb.setBounds   (214, 774, knobSz, knobSz);
+        kSideDb.setBounds  (298, 774, knobSz, knobSz);
 
         // =====================================================================
         // COLUMN 3 (x = 384..540):
         // - HEADER: CHANNELSTRIP + PAPIELGUAPO SIGNATURE (FROM OUTPUT)
-        // - INFLATE (ABOVE MASTER FADER!): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB
-        // - MID & SIDE dB (2 KNOBS FROM OUTPUT)
-        // - MASTER FADER & IN/OUT LED METER
-        // - OUTPUT TRIM KNOB + L/R STEREO METER BARS BESIDE IT
+        // - INFLATE (ABOVE MASTER FADER): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB
+        // - MASTER OUT FADER + DUAL L/R GENERAL LED METER (NO OUTPUT TRIM KNOB)
         // =====================================================================
-        kInfEff.setBounds      (402, 152, smKnob, smKnob);
-        kInfCrv.setBounds      (476, 152, smKnob, smKnob);
-        bClip0.setBounds       (422, 230, 82, 22);
+        kInfEff.setBounds      (400, 156, eqKnob, eqKnob);
+        kInfCrv.setBounds      (472, 156, eqKnob, eqKnob);
+        bClip0.setBounds       (422, 246, 82, 22);
 
-        kMidDb.setBounds       (402, 290, smKnob, smKnob);
-        kSideDb.setBounds      (476, 290, smKnob, smKnob);
-
-        bInOutMeter.setBounds  (390, 398, 58, 22);
-        bMeterScale.setBounds  (390, 424, 58, 22);
-        fader.setBounds        (454, 404, 46, 360);
-
-        // OUTPUT Trim on the left side of bottom card, Stereo L/R Meter on the right side
-        kOutput.setBounds      (400, 814, knobSz, knobSz);
+        // General Dual L/R Meter Controls + Long Master Out Fader
+        bInOutMeter.setBounds  (392, 320, 66, 22);
+        bMeterScale.setBounds  (464, 320, 68, 22);
+        fader.setBounds        (466, 360, 44, 528);
     }
 
     void syncDynamicStates()
@@ -919,8 +856,8 @@ private:
         if (topLabel.isNotEmpty())
         {
             g.setColour (kFLTextBright);
-            g.setFont (getFLFont (10.0f, true));
-            g.drawText (topLabel, Rectangle<float> (b.getX() - 12.0f, b.getY() - 13.0f, 64.0f, 12.0f),
+            g.setFont (getFLFont (9.5f, true));
+            g.drawText (topLabel, Rectangle<float> (b.getX() - 10.0f, b.getY() - 12.0f, 64.0f, 12.0f),
                         Justification::centredLeft, false);
         }
 
@@ -928,7 +865,7 @@ private:
         {
             g.setColour (kFLTextBright);
             g.setFont (getFLFont (8.2f, true));
-            g.drawText (bottomLabel, Rectangle<float> (cx - 40.0f, cy + r + 8.0f, 80.0f, 18.0f),
+            g.drawText (bottomLabel, Rectangle<float> (cx - 40.0f, cy + r + 6.5f, 80.0f, 18.0f),
                         Justification::centredTop, false);
         }
     }
@@ -1006,9 +943,9 @@ private:
             drawIndicatorLed (g, 158.0f, ly, 7.2f, i == 0 ? kLedRed : kLedAmber, cmpGr >= grSteps[i]);
         }
 
-        drawIndicatorLed (g, 44.0f,  696.0f, 7.5f, kLedEmerald, bDynIn.getToggleState());
-        drawIndicatorLed (g, 96.0f,  696.0f, 7.5f, kLedRed,     bExpIn.getToggleState());
-        drawIndicatorLed (g, 148.0f, 696.0f, 7.5f, kLedAmber,   bCmpIn.getToggleState());
+        drawIndicatorLed (g, 44.0f,  696.0f, 7.5f, kFLAccentCyan, bDynIn.getToggleState());
+        drawIndicatorLed (g, 96.0f,  696.0f, 7.5f, kLedRed,       bExpIn.getToggleState());
+        drawIndicatorLed (g, 148.0f, 696.0f, 7.5f, kLedAmber,     bCmpIn.getToggleState());
 
         // FILTERS section: 2 Knobs (HP Hz & LP Hz) + 1 Button + 4 Slope LEDs (6, 12, 18, 24 dB/oct)
         drawDialRingAndLabels (g, kHpf, {}, "HP Hz");
@@ -1022,48 +959,54 @@ private:
         for (int i = 0; i < 4; ++i)
         {
             const float lx = 34.0f + i * 41.0f;
-            drawIndicatorLed (g, lx, 882.0f, 7.5f, i >= 2 ? kLedAmber : kLedEmerald, slopeIdx == i);
+            drawIndicatorLed (g, lx, 882.0f, 7.5f, i >= 2 ? kLedAmber : kFLAccentCyan, slopeIdx == i);
             g.setColour (silkCol);
             g.setFont (getFLFont (7.8f, true));
             g.drawText (slopeNames[i], roundToInt (lx - 18.0f), 892, 36, 11, Justification::centred);
         }
 
         // =====================================================================
-        // COLUMN 2: EQ 6 KNOBS (HF, MID, LF) + 2 BELL BUTTONS + DE-ESS
+        // COLUMN 2: COMPACT EQ (HF, MID, LF) + DE-ESSER + MID/SIDE BELOW DE-ESSER
         // =====================================================================
-        drawDialRingAndLabels (g, kHfGain, {}, "HF dB", "HF");
-        drawIndicatorLed (g, 329.0f, 34.0f, 7.5f, kLedRed, bHfBell.getToggleState());
-        drawDialRingAndLabels (g, kHfFreq, {}, "HF kHz");
+        drawDialRingAndLabels (g, kHfGain,  {}, "HF dB");
+        drawDialRingAndLabels (g, kHfFreq,  {}, "HF kHz");
+        drawIndicatorLed (g, 228.0f, 119.0f, 7.2f, kLedRed, bHfBell.getToggleState());
 
-        drawDialRingAndLabels (g, kMidGain, {}, "MID dB", "MID");
-        const bool isBrown = bEqSel.getToggleState();
-        drawIndicatorLed (g, 314.0f, 280.0f, 7.5f, kLedAmber, !isBrown);
-        drawIndicatorLed (g, 344.0f, 280.0f, 7.5f, kLedAmber, isBrown);
-        g.setColour (silkCol);
-        g.setFont (getFLFont (8.0f, true));
-        g.drawText ("BLK   BRN", 294, 289, 70, 10, Justification::centred);
+        drawDialRingAndLabels (g, kMidGain, {}, "MID dB");
+        drawDialRingAndLabels (g, kMidQ,    {}, "BELL Q");
+        drawCurveGlyph (g, 267.0f, 226.0f, 1, silkCol);
+        drawCurveGlyph (g, 309.0f, 226.0f, 0, silkCol);
         drawDialRingAndLabels (g, kMidFreq, {}, "MID kHz");
+        const bool isBrown = bEqSel.getToggleState();
+        drawIndicatorLed (g, 268.0f, 274.0f, 7.2f, kLedAmber, !isBrown);
+        drawIndicatorLed (g, 308.0f, 274.0f, 7.2f, kLedAmber, isBrown);
+        g.setColour (silkCol);
+        g.setFont (getFLFont (7.8f, true));
+        g.drawText ("BLK     BRN", 252, 282, 72, 10, Justification::centred);
 
-        drawDialRingAndLabels (g, kLfFreq, {}, "LF Hz");
-        drawDialRingAndLabels (g, kLfGain, {}, "LF dB", "LF");
-        drawIndicatorLed (g, 329.0f, 528.0f, 7.5f, kLedAmber, bLfBell.getToggleState());
+        drawDialRingAndLabels (g, kLfGain,  {}, "LF dB");
+        drawDialRingAndLabels (g, kLfFreq,  {}, "LF Hz");
+        drawIndicatorLed (g, 228.0f, 401.0f, 7.2f, kLedAmber, bLfBell.getToggleState());
 
         // Equaliser bottom switches & LEDs
-        drawIndicatorLed (g, 232.0f, 692.0f, 7.5f, kLedEmerald, bEqIn.getToggleState());
-        drawIndicatorLed (g, 288.0f, 692.0f, 7.5f, kLedRed,     bEqSc.getToggleState());
-        drawIndicatorLed (g, 344.0f, 692.0f, 7.5f, kLedAmber,   bEqPre.getToggleState());
+        drawIndicatorLed (g, 232.0f, 492.0f, 7.5f, kFLAccentCyan, bEqIn.getToggleState());
+        drawIndicatorLed (g, 288.0f, 492.0f, 7.5f, kLedRed,       bEqSc.getToggleState());
+        drawIndicatorLed (g, 344.0f, 492.0f, 7.5f, kLedAmber,     bEqPre.getToggleState());
 
         // DE-ESS Section (2 Knobs: FREQ & THRESH + SSL format SPLIT BAND button & GR LED)
         drawDialRingAndLabels (g, kDsFreq, {}, "FREQ Hz");
         drawDialRingAndLabels (g, kDsThr,  {}, "THRESH dB");
-
         const float dsGr = telemetry.deEssReductionDb.load (std::memory_order_relaxed);
-        drawIndicatorLed (g, 288.0f, 844.0f, 8.0f,
-                          dsGr > 0.2f ? kLedRed : kLedEmerald, bDeEss.getToggleState());
+        drawIndicatorLed (g, 288.0f, 646.0f, 7.8f,
+                          dsGr > 0.2f ? kLedRed : kFLAccentCyan, bDeEss.getToggleState());
+
+        // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser!
+        drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
+        drawDialRingAndLabels (g, kSideDb, {}, "SIDE dB");
 
         // =====================================================================
         // COLUMN 3: HEADER (CHANNELSTRIP + PAPIELGUAPO SIGNATURE),
-        //           INFLATE (ABOVE FADER), MID/SIDE, MASTER FADER & OUTPUT + L/R METER
+        //           INFLATE (ABOVE FADER), AND MASTER FADER + DUAL L/R GENERAL METER
         // =====================================================================
         g.setColour (kFLTextBright);
         g.setFont (getFLFont (16.5f, true));
@@ -1086,46 +1029,81 @@ private:
         // INFLATE Section (ABOVE MASTER FADER: 2 Knobs INFLATE & CURVE + CLIP 0 dB Button)
         drawDialRingAndLabels (g, kInfEff, {}, "INFLATE %");
         drawDialRingAndLabels (g, kInfCrv, {}, "CURVE");
-        drawIndicatorLed (g, 410.0f, 241.0f, 7.5f, kLedRed, bClip0.getToggleState());
+        drawIndicatorLed (g, 410.0f, 257.0f, 7.5f, kLedRed, bClip0.getToggleState());
 
-        // MID / SIDE dB Section (from OUTPUT)
-        drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
-        drawDialRingAndLabels (g, kSideDb, {}, "SIDE dB");
+        // =====================================================================
+        // DUAL L / R GENERAL LED METER BESIDE THE MASTER FADER
+        // =====================================================================
+        g.setColour (showPreHeatInputMeter ? kFLAccentCyan : kFLAccentOrange);
+        g.setFont (getFLFont (8.2f, true));
+        g.drawText ("L", 418, 356, 14, 11, Justification::centred);
+        g.drawText ("R", 436, 356, 14, 11, Justification::centred);
 
-        // MASTER FADER & IN/OUT 8-LED METER (dBFS Peak or -18 dBFS RMS = 0 VU Calibrated)
-        constexpr const char* mLabelsPeak[8] = { "OL", "0", "-3", "-6", "-12", "-18", "-27", "-36" };
-        constexpr float mThreshPeak[8]       = { -0.1f, -0.5f, -3.0f, -6.0f, -12.0f, -18.0f, -27.0f, -36.0f };
+        constexpr int kNumMeterRows = 12;
+        constexpr const char* mLabelsPeak[kNumMeterRows] = {
+            "OL", "0", "-3", "-6", "-9", "-12", "-15", "-18", "-24", "-30", "-36", "-48"
+        };
+        constexpr float mThreshPeak[kNumMeterRows] = {
+            -0.1f, -0.5f, -3.0f, -6.0f, -9.0f, -12.0f, -15.0f, -18.0f, -24.0f, -30.0f, -36.0f, -48.0f
+        };
 
-        constexpr const char* mLabelsVu[8]   = { "+6", "+3", "0VU", "-3", "-6", "-12", "-18", "-24" };
-        constexpr float mThreshVu[8]         = {  6.0f,  3.0f,  0.0f, -3.0f, -6.0f, -12.0f, -18.0f, -24.0f };
+        constexpr const char* mLabelsVu[kNumMeterRows] = {
+            "+9", "+6", "+3", "0VU", "-2", "-4", "-6", "-9", "-12", "-15", "-18", "-24"
+        };
+        constexpr float mThreshVu[kNumMeterRows] = {
+             9.0f,  6.0f,  3.0f,  0.0f, -2.0f, -4.0f, -6.0f, -9.0f, -12.0f, -15.0f, -18.0f, -24.0f
+        };
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < kNumMeterRows; ++i)
         {
-            const float my = 468.0f + i * 22.0f;
+            const float my = 382.0f + i * 34.0f;
             const char* lbl = useCalibratedRms18 ? mLabelsVu[i] : mLabelsPeak[i];
             const float thr = useCalibratedRms18 ? mThreshVu[i] : mThreshPeak[i];
-            g.setColour ((useCalibratedRms18 && i == 2) ? kFLAccentOrange : kFLTextBright);
+            const bool isZeroVuRow = (useCalibratedRms18 && i == 3);
+
+            g.setColour (isZeroVuRow ? kFLAccentOrange : kFLTextBright);
             g.setFont (getFLFont (7.8f, true));
             g.drawText (lbl, 388, roundToInt (my - 5.0f), 26, 10, Justification::centredRight);
-            const Colour ledCol = (i == 0) ? kLedRed : (i <= 2 ? kLedAmber : (showPreHeatInputMeter ? kFLAccentCyan : kLedEmerald));
-            drawIndicatorLed (g, 424.0f, my, 7.8f, ledCol, meterMasterDb >= thr);
+
+            const Colour ledCol = (i == 0) ? kLedRed
+                                : (i <= 2) ? kLedAmber
+                                : (showPreHeatInputMeter ? kFLAccentCyan : kLedEmerald);
+
+            // Dual L and R LED columns!
+            drawIndicatorLed (g, 425.0f, my, 8.2f, ledCol, meterDbL >= thr);
+            drawIndicatorLed (g, 443.0f, my, 8.2f, ledCol, meterDbR >= thr);
         }
 
-        // Numeric digital readout below LED ladder so user can nail -18 dBFS RMS (0.0 VU)
+        // Dual L / R Numeric Readout Box at bottom of General Meter
         {
-            const Rectangle<float> digBox (390.0f, 646.0f, 54.0f, 18.0f);
+            const Rectangle<float> digBox (390.0f, 804.0f, 68.0f, 34.0f);
             g.setColour (Colour (0xff121417));
-            g.fillRoundedRectangle (digBox, 3.0f);
-            g.setColour (useCalibratedRms18 ? kFLAccentOrange.withAlpha (0.7f) : Colour (0xff2c3136));
-            g.drawRoundedRectangle (digBox, 3.0f, 0.9f);
-            const String digTxt = (meterMasterDb <= -70.0f) ? "-inf"
-                                : ((meterMasterDb > 0.05f ? "+" : "") + String (meterMasterDb, 1) + (useCalibratedRms18 ? " VU" : " dB"));
+            g.fillRoundedRectangle (digBox, 3.5f);
+            g.setColour (useCalibratedRms18 ? kFLAccentOrange.withAlpha (0.75f) : Colour (0xff2c3136));
+            g.drawRoundedRectangle (digBox, 3.5f, 1.0f);
+
+            auto fmtDb = [this] (float v) -> String
+            {
+                if (v <= -70.0f) return "-inf";
+                return (v > 0.05f ? "+" : "") + String (v, 1);
+            };
+
             g.setColour (useCalibratedRms18 ? kFLAccentOrange : kFLTextBright);
             g.setFont (getFLFont (8.2f, true));
-            g.drawText (digTxt, digBox, Justification::centred, false);
+            g.drawText ("L: " + fmtDb (meterDbL) + (useCalibratedRms18 ? " VU" : " dB"),
+                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 2.0f, digBox.getWidth() - 6.0f, 14.0f),
+                        Justification::centredLeft, false);
+            g.drawText ("R: " + fmtDb (meterDbR) + (useCalibratedRms18 ? " VU" : " dB"),
+                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 17.0f, digBox.getWidth() - 6.0f, 14.0f),
+                        Justification::centredLeft, false);
+
+            g.setColour (kFLTextMuted);
+            g.setFont (getFLFont (7.5f, true));
+            g.drawText (showPreHeatInputMeter ? "PRE-HEAT IN" : "POST-FADER OUT",
+                        Rectangle<float> (388.0f, 842.0f, 72.0f, 12.0f), Justification::centred, false);
         }
 
-        // Console Fader dB Scale
+        // Console Fader dB Scale (10, 5, 0, 5, 10, 20, 30, 40, 50, inf)
         struct FaderMark { float db; const char* text; };
         constexpr FaderMark fMarks[] = {
             {  10.0f, "10" }, {   5.0f, "5"  }, {   0.0f, "0"  },
@@ -1141,13 +1119,12 @@ private:
         {
             const float prop = static_cast<float> (fader.valueToProportionOfLength (fm.db));
             const float fy   = fBot - prop * (fBot - fTop);
-            g.drawText (String::fromUTF8 (fm.text), 498, roundToInt (fy - 6.0f), 28, 12, Justification::centredLeft);
+            g.drawText (String::fromUTF8 (fm.text), 510, roundToInt (fy - 6.0f), 26, 12, Justification::centredLeft);
         }
 
-        // Bottom OUTPUT knob section + Stereo L/R Meter beside it!
-        drawDialRingAndLabels (g, kOutput, {}, "OUTPUT dB");
-        drawStereoMiniMeter (g, Rectangle<float> (478.0f, 808.0f, 46.0f, 98.0f),
-                             meterDbL, meterDbR, showPreHeatInputMeter, useCalibratedRms18);
+        g.setColour (kFLTextBright);
+        g.setFont (getFLFont (9.2f, true));
+        g.drawText ("MASTER OUT", 450, 892, 82, 14, Justification::centred);
     }
 
     AudioProcessor& proc;
@@ -1162,12 +1139,11 @@ private:
     ConsoleDial kExpThr, kExpRng, kExpRel;
     ConsoleDial kHpf, kLpf;
     ConsoleDial kHfGain, kHfFreq;
-    ConsoleDial kMidGain, kMidFreq;
+    ConsoleDial kMidGain, kMidQ, kMidFreq;
     ConsoleDial kLfGain, kLfFreq;
     ConsoleDial kDsFreq, kDsThr;
     ConsoleDial kInfEff, kInfCrv;
     ConsoleDial kMidDb, kSideDb;
-    ConsoleDial kOutput;
     Slider fader;
 
     TextButton bHeatByp, bPhase, bPad;

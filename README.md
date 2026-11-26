@@ -32,32 +32,30 @@
   - Botón **`MODO: GATE` / `MODO: EXPAND`** en color azul cian e indicadores LED **`EXP` / `GATE`**.
 - **Doble escalera vertical de 5 LEDs (`3, 6, 10, 14, 20 dB`)** para reducción de ganancia del compresor y atenuación de puerta, más interruptores **`DYN ON`** (azul cian), **`GATE ON`** y **`COMP ON`**.
 
-### 4. Filtros Paso Alto / Paso Bajo (`HP Hz` / `LP kHz`) con Selector de Pendiente (`6, 12, 18, 24 dB/oct`)
+### 4. Filtros Paso Alto / Paso Bajo Estilo SSL (`HP Hz` / `LP kHz`) con Igual Pendiente (`6, 12, 18, 24 dB/oct`)
 - **2 Perillas**: **`HP Hz`** (`20` a `500 Hz`, bypass en `20 Hz`) y **`LP kHz`** (`1` a `20 kHz`, bypass en `20 kHz`).
-- **1 Botón **`PENDIENTE dB/OCT`** con 4 LEDs indicadores (`6 dB`, `12 dB`, `18 dB`, `24 dB`)**: Conmuta en tiempo real entre topologías de 1.er orden (`6 dB/oct`), 2.º orden Butterworth (`12 dB/oct`), 3.er orden (`18 dB/oct`) y 4.º orden en cascada (`24 dB/oct`).
+- **Misma pendiente simétrica estilo SSL en Low Cut y High Cut (`18 dB/oct` por defecto)**: Ambos filtros comparten exactamente los mismos dB/octava con rodilla analógica musical (`Q = 0.84` + polo de 1.er orden en `18 dB/oct`).
+- **1 Botón **`PENDIENTE dB/OCT`** con 4 LEDs indicadores (`6 dB`, `12 dB`, `18 dB`, `24 dB`)**: Conmuta simultáneamente el Low Cut y el High Cut entre `6`, `12`, `18` y `24 dB/oct`.
 
-### 5. Ecualizador de 6 Perillas (`HF`, `MID`, `LF`) + 2 Botones de Campana + Curvas `BLK / BRN`
-- **6 Perillas limpias (sin cajas numéricas visibles; clic o doble clic abre edición directa de texto)**:
+### 5. Ecualizador Super-Musical de 7 Perillas (`HF`, `MID` con `BELL Q`, `LF`) + 2 Botones de Campana + Curvas `BLK / BRN`
+- **Diseño compacto en la Columna 2 (sin cajas numéricas visibles; clic o doble clic abre edición directa de texto)** con **Q proporcional estilo SSL 242 Black / 02 Brown** (realces pequeños amplios y sedosos; realces o cortes grandes con foco musical automático):
   - **`HF` (Agudos)**: `HF dB` (`-18` a `+18 dB`) y `HF kHz` (`1.5` a `18 kHz`) + botón **`HF CAMPANA`**.
-  - **`MID` (Medios)**: `MID dB` (`-18` a `+18 dB` en pasos discretos de `1 dB`) y `MID kHz` (`200 Hz` a `12 kHz`) + botón **`CURVA BLK/BRN`** con 2 LEDs (`BLK` / `BRN`).
+  - **`MID` (Medios — 3 Perillas)**: `MID dB` (`-18` a `+18 dB` en pasos discretos de `1 dB`), **`BELL Q`** (`0.3` a `8.0` con glifos de campana estrecha/ancha) y `MID kHz` (`200 Hz` a `12 kHz`) + botón **`CURVA BLK/BRN`** con 2 LEDs (`BLK` / `BRN`).
   - **`LF` (Graves)**: `LF dB` (`-18` a `+18 dB`) y `LF Hz` (`30` a `450 Hz`) + botón **`LF CAMPANA`**.
 - Cuando `HF` o `LF` están en modo estantería (*shelf*), su ganancia es continua con decimales; al pulsar **`HF CAMPANA`** o **`LF CAMPANA`**, conmutan a filtro campana con pasos discretos de `1 dB`.
 - Botones inferiores de ruta: **`EQ ON`** (azul cian), **`EQ A SIDECHAIN`** y **`EQ ANTES COMP`**.
 
-### 6. De-Esser de `Vocals` (`VocalsDeEsser` Split Band 7:1)
-- Extraído directamente de `VocalsDSP.h`: detector paso-banda (`Q = 2.0`, ataque de `0.5 ms`, relajación de `32 ms`, ratio `7:1`) y crossover *Split Band* que atenúa únicamente la banda de sibilancia dejando intacto el cuerpo grave/medio de la voz (`-6.60 dB` medidos a `7 kHz` vs `-0.008 dB` a `200 Hz`).
-- **2 Perillas**: **`FREQ Hz`** (`3` a `12 kHz`) y **`THRESH dB`** (`-60` a `0 dB`).
-- **1 Botón formato consola SSL**: **`DE-ESS SPLIT BAND`** con LED indicador de actividad/reducción.
+### 6. De-Esser de `Vocals` + Matriz `MID / SIDE dB` de `OUTPUT` (Columna Central)
+- **`VOCALS DE-ESSER (SPLIT)`**: Ubicado debajo del EQ con sus 2 perillas **`FREQ Hz`** (`3` a `12 kHz`) y **`THRESH dB`** (`-60` a `0 dB`) más el botón formato consola SSL **`DE-ESS SPLIT BAND`** (`-6.60 dB` medidos a `7 kHz` vs `-0.008 dB` a `200 Hz`).
+- **`MID / SIDE dB (OUTPUT)`**: Ubicado justo debajo del De-Esser en la Columna 2 con sus 2 perillas **`MID dB`** (`-20` a `+20 dB`) y **`SIDE dB`** (`-20` a `+20 dB`) usando la matriz exacta de `OUTPUT`.
 
-### 7. `INFLATE` + `CLIP 0 dB` (encima del Master Fader) y Matriz `MID / SIDE` de `OUTPUT`
-- **`INFLATE` (situado encima del Master Fader)**:
+### 7. `INFLATE` + `CLIP 0 dB` (encima del Master Fader) y `MASTER OUT` con Medidor General Doble `L / R`
+- **`INFLATE` (situado encima del Master Fader en la Columna 3)**:
   - Motor polinómico exacto `inflateCore` de `OUTPUT` (`Phobos67Processor`).
-  - **2 Perillas**: **`INFLATE %`** (`0` a `100 %`) y **`CURVE`** (`-50` a `+50`).
-  - **1 Botón**: **`CLIP 0 dB`** con LED rojo para recorte duro a `0 dBFS` (`±1.0`).
-- **Matriz `MID / SIDE dB` de `OUTPUT`**:
-  - **2 Perillas**: **`MID dB`** (`-20` a `+20 dB`) y **`SIDE dB`** (`-20` a `+20 dB`) con codificación/decodificación exacta `M = (L+R)*0.5`, `S = (L-R)*0.5`.
-- **Sección `OUTPUT` y Medidor Estéreo `L / R`**:
-  - Fader maestro de consola (`-80` a `+12 dB`) + perilla **`OUTPUT dB`** (`-20` a `+20 dB`) con barras estéreo independientes **`L` y `R`** justo a su derecha.
+  - **2 Perillas**: **`INFLATE %`** (`0` a `100 %`) y **`CURVE`** (`-50` a `+50`) + botón **`CLIP 0 dB`**.
+- **Fader `MASTER OUT` (último eslabón absoluto de la cadena) + Medidor General Doble `L / R`**:
+  - Se eliminó la sección redundante del knob `Output Trim` inferior para dar recorrido completo al fader **`MASTER OUT`** (`-80` a `+12 dB`), que actúa al final de toda la cadena (después de `Inflate` y `Clip 0 dB`).
+  - A su izquierda se sitúa el **Medidor General Doble `L / R`** de 12 filas de LEDs estéreo con pantalla digital doble (`L:` y `R:`), conmutable entre **`METER: IN`** (señal pre-HEAT después del knob `INPUT +48 dB`) y **`METER: OUT`** (señal final detrás del fader `MASTER OUT`), y entre **`dBFS PEAK`** y **`-18 RMS VU`** (`0 VU = -18 dBFS RMS`).
 
 ---
 
