@@ -1,0 +1,48 @@
+{
+  "Name": "ChannelStrip",
+  "Version": "1.0.0",
+  "Factory Info": {
+    "Vendor": "papielguapo",
+    "URL": "",
+    "E-Mail": "",
+    "Flags": {
+      "Unicode": true,
+      "Classes Discardable": false,
+      "Component Non Discardable": false,
+    },
+  },
+  "Classes": [
+    {
+      "CID": "ABCDEF019182FAEB5070677553726345",
+      "Category": "Audio Module Class",
+      "Name": "ChannelStrip",
+      "Vendor": "papielguapo",
+      "Version": "1.0.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+        "ChannelStrip",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+    {
+      "CID": "ABCDEF011234ABCD5070677553726345",
+      "Category": "Component Controller Class",
+      "Name": "ChannelStrip",
+      "Vendor": "papielguapo",
+      "Version": "1.0.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+        "ChannelStrip",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+  ],
+}

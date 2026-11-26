@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.22)
+project(SurcoE VERSION 1.0.0 LANGUAGES C CXX)
+set(JUCE_PATH "C:/JUCE" CACHE PATH "JUCE source tree")
+add_subdirectory("${JUCE_PATH}" juce)
+juce_add_plugin(SurcoE COMPANY_NAME "papielguapo" BUNDLE_ID "audio.papielguapo.channelstrip"
+    PLUGIN_MANUFACTURER_CODE Ppgu PLUGIN_CODE SrcE FORMATS VST3 PRODUCT_NAME "ChannelStrip"
+    VST3_CATEGORIES Fx ChannelStrip COPY_PLUGIN_AFTER_BUILD FALSE)
+target_sources(SurcoE PRIVATE Processor.cpp Editor.cpp)
+target_compile_features(SurcoE PRIVATE cxx_std_17)
+target_compile_definitions(SurcoE PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(SurcoE PRIVATE juce::juce_audio_utils juce::juce_dsp)
+
+option(SURCO_TEST_HOST "Build the VST3 sidechain test host" OFF)
+if(SURCO_TEST_HOST)
+    juce_add_console_app(CheckKey PRODUCT_NAME "CheckKey")
+    target_sources(CheckKey PRIVATE CheckKey.cpp)
+    target_compile_features(CheckKey PRIVATE cxx_std_17)
+    target_compile_definitions(CheckKey PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_USE_CURL=0)
+    target_link_libraries(CheckKey PRIVATE SurcoE juce::juce_audio_processors_headless)
+endif()
