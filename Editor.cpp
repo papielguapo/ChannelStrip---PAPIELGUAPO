@@ -173,35 +173,39 @@ void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noex
     g.strokePath (p, PathStrokeType (1.4f));
 }
 
-Image createFLHeatBackdrop (int w, int h)
+void drawFLHeatBackdropVector (Graphics& g, int w, int h)
 {
-    Image img (Image::ARGB, w, h, true);
-    Graphics g (img);
-
     const float col1W = 192.0f;
     const float col2W = 192.0f;
     const float col3X = col1W + col2W;
     const float col3W = static_cast<float> (w) - col3X;
 
     // Deep anodized metal chassis base
-    g.fillAll (Colour (0xff14171a));
+    g.fillAll (Colour (0xff121518));
 
     int cardIdx = 0;
     auto drawFLCard = [&] (Rectangle<float> r, const String& title, Colour dotCol, bool withScrews = true)
     {
         ++cardIdx;
-        // Outer drop shadow into chassis gap
-        g.setColour (Colours::black.withAlpha (0.75f));
-        g.fillRoundedRectangle (r.expanded (0.8f).translated (0.0f, 1.8f), 6.0f);
+        // Deep outer drop shadow into chassis gap
+        g.setColour (Colours::black.withAlpha (0.82f));
+        g.fillRoundedRectangle (r.expanded (0.9f).translated (0.0f, 2.2f), 6.0f);
 
-        // Brushed dark aluminum module surface gradient
-        ColourGradient cardGrad (Colour (0xff262a30), r.getX(), r.getY(),
-                                 Colour (0xff191c20), r.getX(), r.getBottom(), false);
-        cardGrad.addColour (0.45, Colour (0xff202429));
+        // Brushed dark aluminum module surface gradient (exact hardware reference look)
+        ColourGradient cardGrad (Colour (0xff272b31), r.getX(), r.getY(),
+                                 Colour (0xff171a1e), r.getX(), r.getBottom(), false);
+        cardGrad.addColour (0.38, Colour (0xff21252b));
+        cardGrad.addColour (0.78, Colour (0xff1b1e23));
         g.setGradientFill (cardGrad);
         g.fillRoundedRectangle (r, 5.5f);
 
-        // Micro-brushed horizontal anodized grain lines + subtle surface patina
+        // Subtle overhead studio spotlight sheen on each hardware module
+        ColourGradient sheen (Colours::white.withAlpha (0.045f), r.getCentreX(), r.getY() + 18.0f,
+                              Colours::transparentBlack, r.getCentreX(), r.getBottom(), true);
+        g.setGradientFill (sheen);
+        g.fillRoundedRectangle (r, 5.5f);
+
+        // Micro-brushed horizontal anodized grain lines + subtle metal patina
         uint32 rng = 0x9E3779B9u ^ static_cast<uint32> (cardIdx * 7919);
         auto nextRand = [&]() noexcept -> float
         {
@@ -210,8 +214,8 @@ Image createFLHeatBackdrop (int w, int h)
         };
         for (int ly = roundToInt (r.getY() + 20.0f); ly < roundToInt (r.getBottom() - 3.0f); ly += 2)
         {
-            const float alpha = 0.012f + 0.022f * nextRand();
-            g.setColour ((ly & 2) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha * 1.4f));
+            const float alpha = 0.014f + 0.024f * nextRand();
+            g.setColour ((ly & 2) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha * 1.45f));
             g.drawHorizontalLine (ly, r.getX() + 3.0f, r.getRight() - 3.0f);
         }
 
@@ -219,21 +223,21 @@ Image createFLHeatBackdrop (int w, int h)
         {
             Rectangle<float> hdr (r.getX() + 1.0f, r.getY() + 1.0f, r.getWidth() - 2.0f, 20.0f);
             ColourGradient hdrGrad (Colour (0xff1a1d21), hdr.getX(), hdr.getY(),
-                                    Colour (0xff121417), hdr.getX(), hdr.getBottom(), false);
+                                    Colour (0xff111316), hdr.getX(), hdr.getBottom(), false);
             g.setGradientFill (hdrGrad);
             g.fillRoundedRectangle (hdr, 5.0f);
 
-            // Subtle groove line below header
-            g.setColour (Colours::black.withAlpha (0.70f));
+            // Engraved groove line below header
+            g.setColour (Colours::black.withAlpha (0.78f));
             g.drawHorizontalLine (roundToInt (hdr.getBottom()), r.getX() + 2.0f, r.getRight() - 2.0f);
-            g.setColour (Colours::white.withAlpha (0.05f));
+            g.setColour (Colours::white.withAlpha (0.06f));
             g.drawHorizontalLine (roundToInt (hdr.getBottom() + 1.0f), r.getX() + 2.0f, r.getRight() - 2.0f);
 
             // Glowing status dot in header
-            g.setColour (dotCol.withAlpha (0.28f));
-            g.fillEllipse (hdr.getX() + 5.0f, hdr.getCentreY() - 4.5f, 9.0f, 9.0f);
+            g.setColour (dotCol.withAlpha (0.32f));
+            g.fillEllipse (hdr.getX() + 4.8f, hdr.getCentreY() - 4.8f, 9.6f, 9.6f);
             g.setColour (dotCol);
-            g.fillEllipse (hdr.getX() + 6.7f, hdr.getCentreY() - 2.8f, 5.6f, 5.6f);
+            g.fillEllipse (hdr.getX() + 6.7f, hdr.getCentreY() - 2.9f, 5.8f, 5.8f);
 
             g.setColour (kFLTextBright);
             g.setFont (getFLFont (10.2f, true));
@@ -241,11 +245,11 @@ Image createFLHeatBackdrop (int w, int h)
         }
 
         // Machined 3D bevel frame: bright top specular edge, dark bottom/outer edge
-        g.setColour (Colour (0xff0b0d0f));
-        g.drawRoundedRectangle (r, 5.5f, 1.2f);
-        g.setColour (Colours::white.withAlpha (0.10f));
-        g.drawRoundedRectangle (r.reduced (1.0f), 4.8f, 0.8f);
-        g.setColour (Colours::white.withAlpha (0.18f));
+        g.setColour (Colour (0xff090b0d));
+        g.drawRoundedRectangle (r, 5.5f, 1.3f);
+        g.setColour (Colours::white.withAlpha (0.11f));
+        g.drawRoundedRectangle (r.reduced (1.0f), 4.8f, 0.85f);
+        g.setColour (Colours::white.withAlpha (0.20f));
         g.drawHorizontalLine (roundToInt (r.getY() + 1.0f), r.getX() + 6.0f, r.getRight() - 6.0f);
 
         // Realistic corner mounting screws on hardware modules
@@ -254,9 +258,9 @@ Image createFLHeatBackdrop (int w, int h)
             const float syTop = r.getY() + 10.5f;
             const float syBot = r.getBottom() - 9.5f;
             if (title.isNotEmpty())
-                drawChassisScrew (g, r.getRight() - 10.5f, syTop, 4.0f, 0.35f + cardIdx * 0.4f);
-            drawChassisScrew (g, r.getX() + 10.0f,     syBot, 4.1f, 1.10f + cardIdx * 0.5f);
-            drawChassisScrew (g, r.getRight() - 10.0f, syBot, 4.1f, 2.05f + cardIdx * 0.3f);
+                drawChassisScrew (g, r.getRight() - 10.5f, syTop, 4.1f, 0.35f + cardIdx * 0.4f);
+            drawChassisScrew (g, r.getX() + 10.0f,     syBot, 4.2f, 1.10f + cardIdx * 0.5f);
+            drawChassisScrew (g, r.getRight() - 10.0f, syBot, 4.2f, 2.05f + cardIdx * 0.3f);
         }
     };
 
@@ -287,7 +291,6 @@ Image createFLHeatBackdrop (int w, int h)
 
     g.setColour (Colour (0xff0b0d10));
     g.drawRect (0, 0, w, h, 1);
-    return img;
 }
 
 class FLHeatLookAndFeel final : public LookAndFeel_V4
@@ -859,25 +862,25 @@ public:
         setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
         setupParamBtn  (bPad,     "MONO",     "AmberBtn", "pad20");
 
-        // Dynamics buttons (100% bound via State::ButtonAttachment for full DAW automation & right-click context menu!)
+        // Dynamics buttons (Red -> Blue -> Yellow sequence for the 3-button row!)
         setupParamBtn  (bLink,    "EXT SC",   "AmberBtn", "extSidechain");
         setupParamBtn  (bExpSel,  "GATE",     "CyanBtn",  "gateMode");
-        setupParamBtn  (bDynIn,   "COMP SC",  "CyanBtn",  "fltDynSc");
-        setupParamBtn  (bExpIn,   "GATE ON",  "RedBtn",   "expIn");
+        setupParamBtn  (bDynIn,   "COMP SC",  "RedBtn",   "fltDynSc");
+        setupParamBtn  (bExpIn,   "GATE ON",  "CyanBtn",  "expIn");
         setupParamBtn  (bCmpIn,   "COMP ON",  "AmberBtn", "cmpIn");
 
-        // EQ Bell buttons & Black/Brown curve button (100% bound via State::ButtonAttachment!)
+        // EQ Bell buttons & Black/Brown curve button (Red -> Blue -> Yellow sequence for the 3-button row!)
         setupParamBtn  (bHfBell,  "BELL",     "RedBtn",   "hfBell");
         setupParamBtn  (bEqSel,   "BLK/BRN",  "AmberBtn", "eqMode");
         setupParamBtn  (bLfBell,  "BELL",     "AmberBtn", "lfBell");
-        setupParamBtn  (bEqIn,    "EQ ON",    "CyanBtn",  "eqIn");
-        setupParamBtn  (bEqSc,    "EQ SC",    "RedBtn",   "eqDynSc");
+        setupParamBtn  (bEqIn,    "EQ ON",    "RedBtn",   "eqIn");
+        setupParamBtn  (bEqSc,    "EQ SC",    "CyanBtn",  "eqDynSc");
         setupParamBtn  (bEqPre,   "PRE DYN",  "AmberBtn", "eqPreDyn");
 
-        // 3 De-Esser buttons (100% bound via State::ButtonAttachment!)
-        setupParamBtn  (bDsType,    "TYPE: BP",  "CyanBtn",  "dsScFilter");
-        setupParamBtn  (bDsMode,    "SPLIT",     "AmberBtn", "dsAudioMode");
-        setupParamBtn  (bDsPrePost, "PRE DYN",   "CyanBtn",  "dsPrePost");
+        // 3 De-Esser buttons (Red -> Blue -> Yellow sequence for the 3-button row!)
+        setupParamBtn  (bDsType,    "TYPE: BP",  "RedBtn",   "dsScFilter");
+        setupParamBtn  (bDsMode,    "SPLIT",     "CyanBtn",  "dsAudioMode");
+        setupParamBtn  (bDsPrePost, "PRE DYN",   "AmberBtn", "dsPrePost");
 
         // Warm -128 dBFS Analog Console Noise button below Mid & Side
         setupParamBtn  (bAnalog,  "ANALOG",   "AmberBtn", "analogNoise");
@@ -889,15 +892,14 @@ public:
         setupParamBtn  (bInOutMeter, "MTR OUT", "CyanBtn",  "meterInOut");
         setupParamBtn  (bMeterScale, "PEAK dB", "AmberBtn", "meterScale");
 
-        backdrop = createFLHeatBackdrop (kBaseW, kBaseH);
         layoutCanvasControls();
         syncDynamicStates();
 
-        // Always open in compact / small window size by default!
+        // 1:1 Resizable vector UI across wide range (0.45x to 2.00x) with corner resizer!
         setResizable (true, true);
         constexpr float initScale = 0.72f;
-        setResizeLimits (roundToInt (kBaseW * 0.55f), roundToInt (kBaseH * 0.55f),
-                         roundToInt (kBaseW * 1.35f), roundToInt (kBaseH * 1.35f));
+        setResizeLimits (roundToInt (kBaseW * 0.45f), roundToInt (kBaseH * 0.45f),
+                         roundToInt (kBaseW * 2.00f), roundToInt (kBaseH * 2.00f));
         if (auto* c = getConstrainer())
             c->setFixedAspectRatio (static_cast<double> (kBaseW) / static_cast<double> (kBaseH));
 
@@ -1274,8 +1276,8 @@ private:
 
     void paintCanvas (Graphics& g)
     {
-        if (backdrop.isValid())
-            g.drawImageAt (backdrop, 0, 0);
+        // Render 100% vector backdrop at full target resolution (zero bitmap blur at any UI scale!)
+        drawFLHeatBackdropVector (g, kBaseW, kBaseH);
 
         const Colour silkCol = kFLTextBright;
 
@@ -1361,8 +1363,8 @@ private:
             drawIndicatorLed (g, 158.0f, ly, 7.0f, i == 0 ? kLedRed : kLedAmber, cmpGr >= grSteps[i]);
         }
 
-        drawIndicatorLed (g, 38.0f,  692.0f, 7.5f, kFLAccentCyan, bDynIn.getToggleState());
-        drawIndicatorLed (g, 96.0f,  692.0f, 7.5f, kLedRed,       bExpIn.getToggleState());
+        drawIndicatorLed (g, 38.0f,  692.0f, 7.5f, kLedRed,       bDynIn.getToggleState());
+        drawIndicatorLed (g, 96.0f,  692.0f, 7.5f, kFLAccentCyan, bExpIn.getToggleState());
         drawIndicatorLed (g, 154.0f, 692.0f, 7.5f, kLedAmber,     bCmpIn.getToggleState());
 
         // FILTERS section: 2 Knobs (HP Hz & LP kHz) + 2 Stepped Slope Knobs (0 dB .. Brickwall)
@@ -1411,8 +1413,8 @@ private:
         drawDialRingAndLabels (g, kLfFreq,  {}, "LF Hz");
         drawIndicatorLed (g, 248.0f, 481.0f, 7.0f, kLedAmber, bLfBell.getToggleState());
 
-        drawIndicatorLed (g, 230.0f, 546.0f, 7.5f, kFLAccentCyan, bEqIn.getToggleState());
-        drawIndicatorLed (g, 288.0f, 546.0f, 7.5f, kLedRed,       bEqSc.getToggleState());
+        drawIndicatorLed (g, 230.0f, 546.0f, 7.5f, kLedRed,       bEqIn.getToggleState());
+        drawIndicatorLed (g, 288.0f, 546.0f, 7.5f, kFLAccentCyan, bEqSc.getToggleState());
         drawIndicatorLed (g, 346.0f, 546.0f, 7.5f, kLedAmber,     bEqPre.getToggleState());
 
         // DE-ESS Section (2 Knobs: FREQ & THRESH + 3 buttons TYPE, MODE, PRE/POST & LEDs)
@@ -1421,9 +1423,9 @@ private:
         const float dsGr = telemetry.deEssReductionDb.load (std::memory_order_relaxed);
         drawIndicatorLed (g, 288.0f, 672.0f, 7.8f,
                           dsGr > 0.2f ? kLedRed : kFLAccentOrange, dsGr > 0.1f);
-        drawIndicatorLed (g, 230.0f, 722.0f, 7.2f, kFLAccentCyan,   bDsType.getToggleState());
-        drawIndicatorLed (g, 288.0f, 722.0f, 7.2f, kFLAccentOrange, roundToInt (state.getRawParameterValue ("dsAudioMode")->load()) == 0);
-        drawIndicatorLed (g, 346.0f, 722.0f, 7.2f, kFLAccentCyan,   bDsPrePost.getToggleState());
+        drawIndicatorLed (g, 230.0f, 722.0f, 7.2f, kLedRed,       bDsType.getToggleState());
+        drawIndicatorLed (g, 288.0f, 722.0f, 7.2f, kFLAccentCyan, roundToInt (state.getRawParameterValue ("dsAudioMode")->load()) == 0);
+        drawIndicatorLed (g, 346.0f, 722.0f, 7.2f, kLedAmber,     bDsPrePost.getToggleState());
 
         // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser + ANALOG -128 dB LED!
         drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
