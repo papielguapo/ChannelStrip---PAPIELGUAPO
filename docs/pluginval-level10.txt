@@ -1,5 +1,5 @@
 Started validating: C:\Users\anton\Desktop\EstripPapielguapo\ChannelStrip.vst3
-Random seed: 0x3c2b27f
+Random seed: 0x74f1a05
 Validation started
 Strictness level: 10
 -----------------------------------------------------------------

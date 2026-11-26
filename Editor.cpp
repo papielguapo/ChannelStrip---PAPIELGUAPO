@@ -421,10 +421,13 @@ class ConsoleDial final : public Slider
 public:
     ConsoleDial()
     {
+        // Scale-invariant mouse drag! Uses standard JUCE Slider::mouseDrag with velocity/linear drag across all UI scales
         setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
         setTextBoxStyle (Slider::TextBoxBelow, false, 52, 20);
         setDoubleClickReturnValue (false, 0.0);
         setSliderSnapsToMousePosition (false);
+        setMouseDragSensitivity (115);
+        setVelocityBasedMode (false);
         setScrollWheelEnabled (true);
         setWantsKeyboardFocus (true);
         setPopupDisplayEnabled (true, true, nullptr);
@@ -439,10 +442,13 @@ public:
     {
         if (e.mods.isRightButtonDown())
         {
-            showTextBox();
+            Slider::mouseDown (e);
+            if (!e.mods.isCommandDown() && !e.mods.isCtrlDown() && !e.mods.isAltDown())
+                showTextBox();
             return;
         }
         dragStartProp = valueToProportionOfLength (getValue());
+        dragStartPt   = e.position;
         isDraggingDial = true;
         Slider::mouseDown (e);
     }
@@ -451,8 +457,12 @@ public:
     {
         if (!isDraggingDial || e.mods.isRightButtonDown())
             return;
-        const float sensitivity = e.mods.isShiftDown() ? 450.0f : 130.0f;
-        const float delta = static_cast<float> (-e.getDistanceFromDragStartY() + e.getDistanceFromDragStartX() * 0.5f) / sensitivity;
+        // e.position is already in local unscaled component coordinates (60x60 / 48x48),
+        // so dragging 100 local units moves full range identically at ANY window scale (0.55x..1.35x)!
+        const float sensitivity = e.mods.isShiftDown() ? 360.0f : 105.0f;
+        const float dy = e.position.y - dragStartPt.y;
+        const float dx = e.position.x - dragStartPt.x;
+        const float delta = (-dy + dx * 0.5f) / sensitivity;
         const double newProp = std::clamp (dragStartProp + static_cast<double> (delta), 0.0, 1.0);
         setValue (proportionOfLengthToValue (newProp), sendNotificationSync);
     }
@@ -476,7 +486,9 @@ public:
         const double dir = (wheel.isReversed ? -1.0 : 1.0) * (delta > 0.0 ? 1.0 : -1.0);
         const double curProp = valueToProportionOfLength (getValue());
         const double nextProp = std::clamp (curProp + dir * stepProp, 0.0, 1.0);
+        if (onDragStart != nullptr) onDragStart();
         setValue (proportionOfLengthToValue (nextProp), sendNotificationSync);
+        if (onDragEnd != nullptr) onDragEnd();
     }
 
     void mouseDoubleClick (const MouseEvent&) override
@@ -486,6 +498,7 @@ public:
 
 private:
     double dragStartProp = 0.0;
+    Point<float> dragStartPt {};
     bool isDraggingDial = false;
 };
 
@@ -510,10 +523,12 @@ public:
         addAndMakeVisible (canvas);
         canvas.setInterceptsMouseClicks (false, true);
 
-        // 1. HIGH-GAIN INPUT (Yellow) + FL HEAT (Factory bipolar: lights up from center like Mid & Side!)
+        // 1. HIGH-GAIN INPUT (Yellow) + FL HEAT (Bipolar) / OUTPUT EVEN & ODD (0..100% Unipolar)
         setupKnob (kInputGain, "preamp",        "SSLYellow");
         setupKnob (kHeatDrive, "heatDrive",     "SSLYellow");
         setupKnob (kHeatTone,  "heatTone",      "SSLBlue");
+        setupKnob (kEvenHarm,  "evenHarmonics", "SSLYellow");
+        setupKnob (kOddHarm,   "oddHarmonics",  "SSLBlue");
 
         // 2. DYNAMICS (COMP): alternating Yellow & Blue
         setupKnob (kCompRat,   "compRatio",     "SSLYellow");
@@ -525,9 +540,11 @@ public:
         setupKnob (kExpRng,    "gateRange",     "SSLYellow");
         setupKnob (kExpRel,    "gateRelease",   "SSLBlue");
 
-        // 4. FILTERS: HP & LP (2 knobs: 1 Yellow + 1 Blue)
+        // 4. FILTERS: HP & LP (2 knobs Hz + 2 stepped knobs from 0 dB to Brickwall!)
         setupKnob (kHpf,       "hpf",           "SSLYellow");
         setupKnob (kLpf,       "lpf",           "SSLBlue");
+        setupKnob (kHpSlope,   "hpSlope",       "SSLYellow");
+        setupKnob (kLpSlope,   "lpSlope",       "SSLBlue");
 
         // 5. 4-BAND EQ: Each 2-knob block has 1 Yellow & 1 Blue; Mid rows alternate Yellow / Blue
         setupKnob (kHfGain,    "highGain",      "SSLYellow");
@@ -564,31 +581,30 @@ public:
         canvas.addAndMakeVisible (fader);
         faderAtt = std::make_unique<State::SliderAttachment> (state, "fader", fader);
 
-        // FL HEAT section buttons (all uniform size!)
-        setupParamBtn  (bHeatByp, "HEAT BYP", "RedBtn",   "heatBypass");
+        // FL HEAT / OUTPUT EVEN & ODD selector button (all uniform size!)
+        setupParamBtn  (bHeatByp, "FL HEAT",  "AmberBtn", "heatBypass");
         setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
         setupParamBtn  (bPad,     "-20 dB",   "AmberBtn", "pad20");
 
-        // Dynamics buttons
+        // Dynamics buttons (100% bound via State::ButtonAttachment for full DAW automation & right-click context menu!)
         setupParamBtn  (bLink,    "EXT SC",   "AmberBtn", "extSidechain");
-        setupActionBtn (bExpSel,  "GATE",     "CyanBtn",  [this] { toggleChoice ("gateMode"); });
+        setupParamBtn  (bExpSel,  "GATE",     "CyanBtn",  "gateMode");
         setupParamBtn  (bDynIn,   "COMP SC",  "CyanBtn",  "fltDynSc");
         setupParamBtn  (bExpIn,   "GATE ON",  "RedBtn",   "expIn");
         setupParamBtn  (bCmpIn,   "COMP ON",  "AmberBtn", "cmpIn");
 
-        // Filter Slope selector button (cycles 6, 12, 18, 24 dB/oct with 4 LEDs)
-        setupActionBtn (bSlope,   "dB/OCT",   "AmberBtn", [this] { toggleChoice ("filterSlope"); });
-
-        // EQ Bell buttons & Black/Brown curve button
+        // EQ Bell buttons & Black/Brown curve button (100% bound via State::ButtonAttachment!)
         setupParamBtn  (bHfBell,  "BELL",     "RedBtn",   "hfBell");
-        setupActionBtn (bEqSel,   "BLK/BRN",  "AmberBtn", [this] { toggleChoice ("eqMode"); });
+        setupParamBtn  (bEqSel,   "BLK/BRN",  "AmberBtn", "eqMode");
         setupParamBtn  (bLfBell,  "BELL",     "AmberBtn", "lfBell");
         setupParamBtn  (bEqIn,    "EQ ON",    "CyanBtn",  "eqIn");
         setupParamBtn  (bEqSc,    "EQ SC",    "RedBtn",   "eqDynSc");
         setupParamBtn  (bEqPre,   "PRE DYN",  "AmberBtn", "eqPreDyn");
 
-        // SSL-format De-Esser Split Band button
-        setupParamBtn  (bDeEss,   "DE-ESS",   "AmberBtn", "deEss");
+        // 3 De-Esser buttons (100% bound via State::ButtonAttachment!)
+        setupParamBtn  (bDsType,    "TYPE: BP",  "CyanBtn",  "dsScFilter");
+        setupParamBtn  (bDsMode,    "SPLIT",     "AmberBtn", "dsAudioMode");
+        setupParamBtn  (bDsPrePost, "PRE DYN",   "CyanBtn",  "dsPrePost");
 
         // Warm -128 dBFS Analog Console Noise button below Mid & Side
         setupParamBtn  (bAnalog,  "ANALOG",   "AmberBtn", "analogNoise");
@@ -596,23 +612,9 @@ public:
         // OUTPUT Inflate CLIP 0 dB button
         setupParamBtn  (bClip0,   "CLIP 0",   "RedBtn",   "inflateClip");
 
-        // General Dual L/R Meter IN / OUT Selector (IN = Pre-HEAT Input, OUT = Final Post-Fader Output)
-        setupActionBtn (bInOutMeter, "MTR OUT", "CyanBtn", [this]
-        {
-            showPreHeatInputMeter = !showPreHeatInputMeter;
-            bInOutMeter.setToggleState (showPreHeatInputMeter, dontSendNotification);
-            bInOutMeter.setButtonText (showPreHeatInputMeter ? "MTR IN" : "MTR OUT");
-        });
-        bInOutMeter.setToggleState (false, dontSendNotification);
-
-        // dBFS Peak vs -18 dBFS RMS (0 VU Calibrated) Scale Selector Button
-        setupActionBtn (bMeterScale, "PEAK dB", "AmberBtn", [this]
-        {
-            useCalibratedRms18 = !useCalibratedRms18;
-            bMeterScale.setToggleState (useCalibratedRms18, dontSendNotification);
-            bMeterScale.setButtonText (useCalibratedRms18 ? "-18 VU" : "PEAK dB");
-        });
-        bMeterScale.setToggleState (false, dontSendNotification);
+        // General Dual L/R Meter IN / OUT & Scale Selectors (100% bound via State::ButtonAttachment for full DAW automation!)
+        setupParamBtn  (bInOutMeter, "MTR OUT", "CyanBtn",  "meterInOut");
+        setupParamBtn  (bMeterScale, "PEAK dB", "AmberBtn", "meterScale");
 
         backdrop = createFLHeatBackdrop (kBaseW, kBaseH);
         layoutCanvasControls();
@@ -776,6 +778,8 @@ private:
 
         kHeatDrive.setBounds (24, 114, 54, 54);
         kHeatTone.setBounds  (96, 114, 54, 54);
+        kEvenHarm.setBounds  (24, 114, 54, 54);
+        kOddHarm.setBounds   (96, 114, 54, 54);
 
         // COMPRESSOR Card (y = 198..422)
         kCompRat.setBounds (18, 224, knobSz, knobSz);
@@ -794,10 +798,11 @@ private:
         bExpIn.setBounds (70,  658, btnW, btnH);
         bCmpIn.setBounds (128, 658, btnW, btnH);
 
-        // Filters: HP Hz & LP Hz (2 knobs) + 1 Button & 4 LEDs (6, 12, 18, 24 dB/oct)
-        kHpf.setBounds   (22, 748, knobSz, knobSz);
-        kLpf.setBounds   (108, 748, knobSz, knobSz);
-        bSlope.setBounds (70, 844, btnW, btnH);
+        // Filters: HP Hz & LP kHz (top row) + 2 Stepped Slope Knobs (0 dB .. Brickwall, bottom row)
+        kHpf.setBounds     (24,  740, 52, 52);
+        kLpf.setBounds     (112, 740, 52, 52);
+        kHpSlope.setBounds (24,  822, 52, 52);
+        kLpSlope.setBounds (112, 822, 52, 52);
 
         // =====================================================================
         // COLUMN 2 (x = 192..384):
@@ -831,10 +836,12 @@ private:
         bEqSc.setBounds    (262, 514, btnW, btnH);
         bEqPre.setBounds   (320, 514, btnW, btnH);
 
-        // DE-ESS Section (y = 566..740): 2 Knobs (FREQ & THRESH) + 1 SSL Button
-        kDsFreq.setBounds  (214, 592, 52, 52);
-        kDsThr.setBounds   (302, 592, 52, 52);
-        bDeEss.setBounds   (262, 696, btnW, btnH);
+        // DE-ESS Section (y = 566..740): 2 Knobs (FREQ & THRESH) + 3 uniform 52x22 buttons (TYPE, MODE, PRE/POST)
+        kDsFreq.setBounds    (214, 592, 52, 52);
+        kDsThr.setBounds     (302, 592, 52, 52);
+        bDsType.setBounds    (204, 688, btnW, btnH);
+        bDsMode.setBounds    (262, 688, btnW, btnH);
+        bDsPrePost.setBounds (320, 688, btnW, btnH);
 
         // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915) + ANALOG (-128 dB) button!
         kMidDb.setBounds   (214, 772, 54, 54);
@@ -859,12 +866,37 @@ private:
 
     void syncDynamicStates()
     {
+        // Switch between FL HEAT (Drive/Tone) and OUTPUT EVEN/ODD Harmonics (0..100%)
+        const bool isEvenOddMode = bHeatByp.getToggleState();
+        bHeatByp.setButtonText (isEvenOddMode ? "EVEN/ODD" : "FL HEAT");
+        bHeatByp.setComponentID (isEvenOddMode ? "CyanBtn" : "AmberBtn");
+        kHeatDrive.setVisible (!isEvenOddMode);
+        kHeatTone.setVisible  (!isEvenOddMode);
+        kEvenHarm.setVisible  (isEvenOddMode);
+        kOddHarm.setVisible   (isEvenOddMode);
+
         const int eqCurv = roundToInt (state.getRawParameterValue ("eqMode")->load());
         bEqSel.setToggleState (eqCurv == 1, dontSendNotification);
 
         const int gMode = roundToInt (state.getRawParameterValue ("gateMode")->load());
         bExpSel.setToggleState (gMode == 1, dontSendNotification);
         bExpSel.setButtonText (gMode == 1 ? "EXPAND" : "GATE");
+
+        // Sync the 3 De-Esser buttons (TYPE, MODE, PRE DYN)
+        const int dsSc = roundToInt (state.getRawParameterValue ("dsScFilter")->load());
+        bDsType.setToggleState (dsSc == 1, dontSendNotification);
+        bDsType.setButtonText (dsSc == 1 ? "TYPE: BP" : "TYPE: HP");
+
+        const int dsMd = roundToInt (state.getRawParameterValue ("dsAudioMode")->load());
+        bDsMode.setButtonText (dsMd == 0 ? "SPLIT" : "WIDE");
+
+        bDsPrePost.setButtonText ("PRE DYN");
+
+        showPreHeatInputMeter = bInOutMeter.getToggleState();
+        bInOutMeter.setButtonText (showPreHeatInputMeter ? "MTR IN" : "MTR OUT");
+
+        useCalibratedRms18 = bMeterScale.getToggleState();
+        bMeterScale.setButtonText (useCalibratedRms18 ? "-18 VU" : "PEAK dB");
 
         // Enforce 1 dB steps when HF or LF is in BELL mode, continuous when in SHELF mode
         kHfGain.setRange (-18.0, 18.0, bHfBell.getToggleState() ? 1.0 : 0.01);
@@ -963,18 +995,30 @@ private:
         const Colour silkCol = kFLTextBright;
 
         // =====================================================================
-        // COLUMN 1: INPUT GAIN (+48 dB) + FL HEAT (DRIVE & TONE), COMPRESSOR, GATE, FILTERS
+        // COLUMN 1: INPUT GAIN (+48 dB) + FL HEAT / OUTPUT EVEN & ODD, COMPRESSOR, GATE, FILTERS
         // =====================================================================
-        const float hDrive = state.getRawParameterValue ("heatDrive")->load();
-        const bool  hByp   = bHeatByp.getToggleState();
-        const Colour heatLedCol = (hDrive < -0.05f) ? kFLAccentCyan : kFLAccentOrange;
+        const float hDrive      = state.getRawParameterValue ("heatDrive")->load();
+        const float evenVal     = state.getRawParameterValue ("evenHarmonics")->load();
+        const float oddVal      = state.getRawParameterValue ("oddHarmonics")->load();
+        const bool  evenOddMode = bHeatByp.getToggleState();
+        const Colour heatLedCol = evenOddMode
+                                ? ((oddVal > evenVal + 0.5f) ? kFLAccentCyan : kFLAccentOrange)
+                                : ((hDrive < -0.05f) ? kFLAccentCyan : kFLAccentOrange);
+        const bool   colorLit   = evenOddMode ? (evenVal > 0.5f || oddVal > 0.5f) : (std::abs (hDrive) > 0.05f);
         drawIndicatorLed (g, 84.0f, 34.0f, 7.5f, kFLAccentCyan, std::abs (state.getRawParameterValue ("preamp")->load()) > 0.05f);
-        // HEAT BYP LED placed on the left side of the HEAT BYP button so the group stays centered!
-        drawIndicatorLed (g, 110.0f, 91.0f, 7.5f, heatLedCol, !hByp);
+        drawIndicatorLed (g, 110.0f, 91.0f, 7.5f, heatLedCol, colorLit);
 
         drawDialRingAndLabels (g, kInputGain, {}, "INPUT +48 dB");
-        drawDialRingAndLabels (g, kHeatDrive, {}, "HEAT DRIVE");
-        drawDialRingAndLabels (g, kHeatTone,  {}, "HEAT TONE");
+        if (evenOddMode)
+        {
+            drawDialRingAndLabels (g, kEvenHarm, {}, "EVEN %");
+            drawDialRingAndLabels (g, kOddHarm,  {}, "ODD %");
+        }
+        else
+        {
+            drawDialRingAndLabels (g, kHeatDrive, {}, "HEAT DRIVE");
+            drawDialRingAndLabels (g, kHeatTone,  {}, "HEAT TONE");
+        }
 
         g.setColour (silkCol);
         g.setFont (getFLFont (8.8f, true));
@@ -1033,23 +1077,17 @@ private:
         drawIndicatorLed (g, 96.0f,  692.0f, 7.5f, kLedRed,       bExpIn.getToggleState());
         drawIndicatorLed (g, 154.0f, 692.0f, 7.5f, kLedAmber,     bCmpIn.getToggleState());
 
-        // FILTERS section: 2 Knobs (HP Hz & LP Hz) + 1 Button + 4 Slope LEDs (6, 12, 18, 24 dB/oct)
+        // FILTERS section: 2 Knobs (HP Hz & LP kHz) + 2 Stepped Slope Knobs (0 dB .. Brickwall)
         drawDialRingAndLabels (g, kHpf, {}, "HP Hz");
-        drawCurveGlyph (g, 20.0f, 822.0f, 2, silkCol);
+        drawCurveGlyph (g, 16.0f, 796.0f, 2, silkCol);
         drawDialRingAndLabels (g, kLpf, {}, "LP kHz");
-        drawCurveGlyph (g, 172.0f, 822.0f, 3, silkCol);
+        drawCurveGlyph (g, 174.0f, 796.0f, 3, silkCol);
 
-        // 4 LEDs for Filter Slope (6, 12, 18, 24 dB/oct)
-        const int slopeIdx = roundToInt (state.getRawParameterValue ("filterSlope")->load());
-        constexpr const char* slopeNames[4] = { "6 dB", "12 dB", "18 dB", "24 dB" };
-        for (int i = 0; i < 4; ++i)
-        {
-            const float lx = 34.0f + i * 41.0f;
-            drawIndicatorLed (g, lx, 882.0f, 7.5f, i >= 2 ? kLedAmber : kFLAccentCyan, slopeIdx == i);
-            g.setColour (silkCol);
-            g.setFont (getFLFont (8.8f, true));
-            g.drawText (slopeNames[i], roundToInt (lx - 18.0f), 892, 36, 12, Justification::centred);
-        }
+        constexpr const char* slopeNames[8] = { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "BRICK" };
+        const int hpIdx = std::clamp (roundToInt (state.getRawParameterValue ("hpSlope")->load()), 0, 7);
+        const int lpIdx = std::clamp (roundToInt (state.getRawParameterValue ("lpSlope")->load()), 0, 7);
+        drawDialRingAndLabels (g, kHpSlope, {}, String ("HP: ") + slopeNames[hpIdx]);
+        drawDialRingAndLabels (g, kLpSlope, {}, String ("LP: ") + slopeNames[lpIdx]);
 
         // =====================================================================
         // COLUMN 2: SEPARATED EQ HF, EQ MID (HMF & LMF), EQ LF + DE-ESSER + MID/SIDE
@@ -1089,12 +1127,15 @@ private:
         drawIndicatorLed (g, 288.0f, 546.0f, 7.5f, kLedRed,       bEqSc.getToggleState());
         drawIndicatorLed (g, 346.0f, 546.0f, 7.5f, kLedAmber,     bEqPre.getToggleState());
 
-        // DE-ESS Section (2 Knobs: FREQ & THRESH + SSL format SPLIT BAND button & GR LED)
+        // DE-ESS Section (2 Knobs: FREQ & THRESH + 3 buttons TYPE, MODE, PRE/POST & LEDs)
         drawDialRingAndLabels (g, kDsFreq, {}, "FREQ Hz");
         drawDialRingAndLabels (g, kDsThr,  {}, "THRESH dB");
         const float dsGr = telemetry.deEssReductionDb.load (std::memory_order_relaxed);
-        drawIndicatorLed (g, 288.0f, 682.0f, 7.8f,
-                          dsGr > 0.2f ? kLedRed : kFLAccentCyan, bDeEss.getToggleState());
+        drawIndicatorLed (g, 288.0f, 672.0f, 7.8f,
+                          dsGr > 0.2f ? kLedRed : kFLAccentOrange, dsGr > 0.1f);
+        drawIndicatorLed (g, 230.0f, 722.0f, 7.2f, kFLAccentCyan,   bDsType.getToggleState());
+        drawIndicatorLed (g, 288.0f, 722.0f, 7.2f, kFLAccentOrange, roundToInt (state.getRawParameterValue ("dsAudioMode")->load()) == 0);
+        drawIndicatorLed (g, 346.0f, 722.0f, 7.2f, kFLAccentCyan,   bDsPrePost.getToggleState());
 
         // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser + ANALOG -128 dB LED!
         drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
@@ -1225,10 +1266,10 @@ private:
     Image backdrop;
     CanvasComponent canvas { *this };
 
-    ConsoleDial kInputGain, kHeatDrive, kHeatTone;
+    ConsoleDial kInputGain, kHeatDrive, kHeatTone, kEvenHarm, kOddHarm;
     ConsoleDial kCompRat, kCompThr, kCompRel;
     ConsoleDial kExpThr, kExpRng, kExpRel;
-    ConsoleDial kHpf, kLpf;
+    ConsoleDial kHpf, kLpf, kHpSlope, kLpSlope;
     ConsoleDial kHfGain, kHfFreq;
     ConsoleDial kMidGain, kMidQ, kMidFreq;
     ConsoleDial kLmfGain, kLmfQ, kLmfFreq;
@@ -1240,9 +1281,8 @@ private:
 
     TextButton bHeatByp, bPhase, bPad;
     TextButton bLink, bExpSel, bDynIn, bExpIn, bCmpIn;
-    TextButton bSlope;
     TextButton bHfBell, bEqSel, bLfBell, bEqIn, bEqSc, bEqPre;
-    TextButton bDeEss, bAnalog;
+    TextButton bDsType, bDsMode, bDsPrePost, bAnalog;
     TextButton bClip0, bInOutMeter, bMeterScale;
 
     bool showPreHeatInputMeter = false;
@@ -1283,6 +1323,8 @@ void renderSurcoEditorSnapshot (const File& outPng)
         if (nm == "Gate release")         p->setValueNotifyingHost (0.45f);
         if (nm == "High pass")            p->setValueNotifyingHost (0.42f);
         if (nm == "Low pass")             p->setValueNotifyingHost (0.68f);
+        if (nm == "HP Slope")             p->setValueNotifyingHost (4.0f / 7.0f);
+        if (nm == "LP Slope")             p->setValueNotifyingHost (7.0f / 7.0f);
         if (nm == "Inflate Effect")  p->setValueNotifyingHost (0.58f);
         if (nm == "Inflate Curve")   p->setValueNotifyingHost (0.65f);
         if (nm == "High shelf gain") p->setValueNotifyingHost (0.68f);
@@ -1290,10 +1332,12 @@ void renderSurcoEditorSnapshot (const File& outPng)
         if (nm == "Low mid gain")    p->setValueNotifyingHost (0.64f);
         if (nm == "Low shelf gain")  p->setValueNotifyingHost (0.58f);
         if (nm == "De-Ess")          p->setValueNotifyingHost (1.0f);
+        if (nm == "DeEsser Thresh")  p->setValueNotifyingHost (0.60f);
         if (nm == "Analog Noise")    p->setValueNotifyingHost (1.0f);
         if (nm == "Clip 0 dB")       p->setValueNotifyingHost (1.0f);
         if (nm == "Mid Gain")        p->setValueNotifyingHost (0.62f);
         if (nm == "Side Gain")       p->setValueNotifyingHost (0.64f);
+        if (nm == "Meter Scale (-18 VU)") p->setValueNotifyingHost (1.0f);
     }
     AudioBuffer<float> buf (2, 256);
     MidiBuffer midi;

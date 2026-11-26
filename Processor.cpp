@@ -14,9 +14,11 @@ enum Param {
     compRatio, compAttack, compRelease, compMakeup, gateMode, gateThreshold,
     gateRange, gateAttack, gateRelease, extSidechain, fader, preampMode, eqMode, deEss,
     phaseInv, pad20, hfBell, lfBell, eqIn, eqPreDyn, eqDynSc, dynIn, expIn, cmpIn,
-    fltDynSc, fltPreDyn, filterSlope, dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor,
-    heatDrive, heatTone, heatBypass, midGain, sideGain, inflateEffect, inflateCurve, inflateClip,
-    oversampling, analogNoise, count
+    fltDynSc, fltPreDyn, filterSlope, hpSlopeParam, lpSlopeParam,
+    dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor, dsPrePost,
+    heatDrive, heatTone, heatBypass, evenHarmonics, oddHarmonics, midGain, sideGain,
+    inflateEffect, inflateCurve, inflateClip, oversampling, analogNoise,
+    meterInOutParam, meterScaleParam, count
 };
 
 constexpr const char* ids[] = {
@@ -25,9 +27,11 @@ constexpr const char* ids[] = {
     "compRatio","compAttack","compRelease","compMakeup","gateMode","gateThreshold",
     "gateRange","gateAttack","gateRelease","extSidechain","fader","preampMode","eqMode","deEss",
     "phaseInv","pad20","hfBell","lfBell","eqIn","eqPreDyn","eqDynSc","dynIn","expIn","cmpIn",
-    "fltDynSc","fltPreDyn","filterSlope","dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor",
-    "heatDrive","heatTone","heatBypass","midGain","sideGain","inflateEffect","inflateCurve","inflateClip",
-    "oversampling","analogNoise"
+    "fltDynSc","fltPreDyn","filterSlope","hpSlope","lpSlope",
+    "dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor","dsPrePost",
+    "heatDrive","heatTone","heatBypass","evenHarmonics","oddHarmonics","midGain","sideGain",
+    "inflateEffect","inflateCurve","inflateClip","oversampling","analogNoise",
+    "meterInOut","meterScale"
 };
 static_assert (std::size (ids) == count);
 
@@ -37,7 +41,7 @@ State::ParameterLayout layout()
     auto add = [&] (Param p, const char* name, float min, float max, float def, const char* unit, bool log = false)
     {
         juce::NormalisableRange<float> range (min, max);
-        if (p == lowMidGain || p == highMidGain || p == midGain || p == sideGain)
+        if (p == lowMidGain || p == highMidGain || p == midGain || p == sideGain || p == evenHarmonics || p == oddHarmonics)
             range.interval = 1.0f;
         if (log) range.setSkewForCentre (std::sqrt (min * max));
         result.add (std::make_unique<juce::AudioParameterFloat> (
@@ -84,7 +88,8 @@ State::ParameterLayout layout()
     add (fader, "Output fader", -80, 12, 0, "dB");
     choice (preampMode, "Preamp model", { "Standard", "Vocals Line", "Vocals Mic" });
     choice (eqMode, "EQ curve", { "Black", "Brown" });
-    flag (deEss, "De-Ess", false);
+    // Vocals De-Esser Stage parameters (default ON, with TYPE: HighPass/BandPass, MODE: Split/Wide, PRE/POST routing!)
+    flag (deEss, "De-Ess", true);
 
     // Console switches
     flag (phaseInv, "Phase invert", false);
@@ -99,19 +104,25 @@ State::ParameterLayout layout()
     flag (cmpIn, "Compressor In", true);
     flag (fltDynSc, "Filters Dyn SC", false);
     flag (fltPreDyn, "Filters Pre Dyn", true);
-    choice (filterSlope, "Filter slope", { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct" }, 2);
+    choice (filterSlope,  "Filter slope", { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct" }, 2);
+    choice (hpSlopeParam, "HP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 3);
+    choice (lpSlopeParam, "LP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 3);
 
     // Vocals De-Esser Stage parameters
     add (dsFreq, "DeEsser Freq", 3000.0f, 12000.0f, 6200.0f, "Hz", true);
-    add (dsThresh, "DeEsser Thresh", -60.0f, 0.0f, -24.0f, "dB");
+    add (dsThresh, "DeEsser Thresh", -60.0f, 0.0f, 0.0f, "dB");
     choice (dsScFilter, "DeEsser SC Filter", { "HighPass", "BandPass" }, 1);
     choice (dsAudioMode, "DeEsser Audio Mode", { "Split", "Wide" }, 0);
     flag (dsMonitor, "DeEsser SC Monitor", false);
+    flag (dsPrePost, "DeEsser Pre Dyn", true);
 
-    // FL HEAT Stage parameters (replaces Line/Mic in UI: Drive -10..+10, Tone -10..+10, Bypass)
-    add (heatDrive, "Heat Drive", -10.0f, 10.0f, 0.0f, "");
-    add (heatTone,  "Heat Tone",  -10.0f, 10.0f, 0.0f, "");
-    flag (heatBypass, "Heat Bypass", false);
+    // FL HEAT / OUTPUT EVEN & ODD Color Stage parameters
+    // heatBypass: false = FL HEAT (Drive & Tone), true = OUTPUT EVEN & ODD Harmonics (0..100%)
+    add (heatDrive,     "Heat Drive",     -10.0f, 10.0f, 0.0f, "");
+    add (heatTone,      "Heat Tone",      -10.0f, 10.0f, 0.0f, "");
+    flag (heatBypass,   "Color Mode (Heat / Even-Odd)", false);
+    add (evenHarmonics, "Even Harmonics",   0.0f, 100.0f, 0.0f, "%");
+    add (oddHarmonics,  "Odd Harmonics",    0.0f, 100.0f, 0.0f, "%");
 
     // OUTPUT Mid/Side & Inflate Stage parameters
     add (midGain,       "Mid Gain",       -20.0f, 20.0f, 0.0f, "dB");
@@ -119,8 +130,10 @@ State::ParameterLayout layout()
     add (inflateEffect, "Inflate Effect", 0.0f, 100.0f, 0.0f, "%");
     add (inflateCurve,  "Inflate Curve", -50.0f, 50.0f, 0.0f, "");
     flag (inflateClip,  "Clip 0 dB", false);
-    choice (oversampling, "Oversampling", { "1x Native", "2x OS", "4x OS", "8x OS" }, 0);
-    flag (analogNoise,  "Analog Noise", false);
+    choice (oversampling,    "Oversampling",         { "1x Native", "2x OS", "4x OS", "8x OS" }, 0);
+    flag (analogNoise,       "Analog Noise",         false);
+    flag (meterInOutParam,   "Meter In / Out",       false);
+    flag (meterScaleParam,   "Meter Scale (-18 VU)", false);
 
     return result;
 }
@@ -128,6 +141,8 @@ State::ParameterLayout layout()
 struct Filter
 {
     double b0=1,b1=0,b2=0,a1=0,a2=0;
+    double lastHz=-1,lastQ=-1,lastDb=-999,lastFs=-1;
+    int lastType=-1;
     std::array<double,2> z1{},z2{};
     void set (double b, double c, double d, double a, double e, double f)
     { b0=b/a; b1=c/a; b2=d/a; a1=e/a; a2=f/a; }
@@ -137,6 +152,9 @@ struct Filter
     }
     void tuneFirstOrder (int type, double hz, double fs)
     {
+        if (lastType == type + 10 && std::abs(hz - lastHz) < 1e-4 && std::abs(fs - lastFs) < 1e-2)
+            return;
+        lastType = type + 10; lastHz = hz; lastFs = fs;
         const double fc = std::clamp (hz, 10.0, 0.475 * fs);
         const double k = std::tan (juce::MathConstants<double>::pi * fc / fs);
         const double norm = 1.0 / (1.0 + k);
@@ -153,6 +171,10 @@ struct Filter
     }
     void tune (int type, double hz, double q, double db, double fs)
     {
+        if (lastType == type && std::abs(hz - lastHz) < 1e-4 && std::abs(q - lastQ) < 1e-5
+            && std::abs(db - lastDb) < 1e-4 && std::abs(fs - lastFs) < 1e-2)
+            return;
+        lastType = type; lastHz = hz; lastQ = q; lastDb = db; lastFs = fs;
         const auto w=juce::MathConstants<double>::twoPi*std::min (hz,0.475*fs)/fs;
         const auto c=std::cos(w), s=std::sin(w), alpha=s/(2*q), A=std::pow(10.0,db/40);
         if (type<2)
@@ -170,40 +192,82 @@ struct Filter
     }
 };
 
+// Stepped HP/LP Filter from 0 dB (Off) up to Brickwall (96 dB/oct 16-pole Butterworth cascade)
+// Slope steps: 0=0 dB (Off), 1=6 dB, 2=12 dB, 3=18 dB, 4=24 dB, 5=36 dB, 6=48 dB, 7=Brickwall (96 dB/oct)
 struct SlopeFilter
 {
-    Filter stageA, stageB;
-    int slopeOrder = 1;
+    std::array<Filter, 8> stages{};
+    int numBiquads = 0;
+    bool hasFirstOrder = false;
+    int slopeStep = 3;
 
-    void clear() noexcept { stageA = {}; stageB = {}; }
+    void clear() noexcept { stages = {}; }
 
-    void tune (int type, double hz, int slopeIdx, double fs) noexcept
+    void tune (int type, double hz, int stepIdx, double fs) noexcept
     {
-        slopeOrder = std::clamp (slopeIdx, 0, 3);
-        if (slopeOrder == 0) // 6 dB/oct (1st-order RC)
+        slopeStep = std::clamp (stepIdx, 0, 7);
+        numBiquads = 0;
+        hasFirstOrder = false;
+
+        if (slopeStep == 0) // 0 dB/oct (Off / Bypass)
+            return;
+
+        if (slopeStep == 1) // 6 dB/oct (1st-order RC)
         {
-            stageA.tuneFirstOrder (type, hz, fs);
+            hasFirstOrder = true;
+            stages[0].tuneFirstOrder (type, hz, fs);
         }
-        else if (slopeOrder == 1) // 12 dB/oct SSL Brown-style (Q = 0.78 slight analog knee punch)
+        else if (slopeStep == 2) // 12 dB/oct SSL style
         {
-            stageA.tune (type, hz, 0.78, 0.0, fs);
+            numBiquads = 1;
+            stages[0].tune (type, hz, 0.78, 0.0, fs);
         }
-        else if (slopeOrder == 2) // 18 dB/oct SSL E-Series style (3-pole active Sallen-Key Q = 0.84 + 1st-order pole, identical slope on HP & LP!)
+        else if (slopeStep == 3) // 18 dB/oct SSL E-Series style
         {
-            stageA.tune (type, hz, 0.84, 0.0, fs);
-            stageB.tuneFirstOrder (type, hz, fs);
+            numBiquads = 1;
+            hasFirstOrder = true;
+            stages[0].tune (type, hz, 0.84, 0.0, fs);
+            stages[1].tuneFirstOrder (type, hz, fs);
         }
-        else // 24 dB/oct SSL G-Series style (4-pole cascade with warm analog knee, identical on HP & LP!)
+        else if (slopeStep == 4) // 24 dB/oct SSL G-Series style
         {
-            stageA.tune (type, hz, 0.56, 0.0, fs);
-            stageB.tune (type, hz, 1.34, 0.0, fs);
+            numBiquads = 2;
+            stages[0].tune (type, hz, 0.56, 0.0, fs);
+            stages[1].tune (type, hz, 1.34, 0.0, fs);
+        }
+        else if (slopeStep == 5) // 36 dB/oct (6-pole Butterworth cascade)
+        {
+            numBiquads = 3;
+            constexpr double q6[3] = { 0.51763809, 0.70710678, 1.93185165 };
+            for (int k = 0; k < 3; ++k) stages[k].tune (type, hz, q6[k], 0.0, fs);
+        }
+        else if (slopeStep == 6) // 48 dB/oct (8-pole Butterworth cascade)
+        {
+            numBiquads = 4;
+            constexpr double q8[4] = { 0.50979558, 0.60134489, 0.89997622, 2.56291545 };
+            for (int k = 0; k < 4; ++k) stages[k].tune (type, hz, q8[k], 0.0, fs);
+        }
+        else // 7 = Brickwall (96 dB/oct 16-pole Butterworth cascade!)
+        {
+            numBiquads = 8;
+            constexpr double q16[8] = {
+                0.50241929, 0.52249861, 0.56694403, 0.64682178,
+                0.78815462, 1.06067769, 1.72244710, 5.10114862
+            };
+            for (int k = 0; k < 8; ++k) stages[k].tune (type, hz, q16[k], 0.0, fs);
         }
     }
 
     inline double tick (int ch, double x) noexcept
     {
-        const double y = stageA.tick (ch, x);
-        return (slopeOrder >= 2) ? stageB.tick (ch, y) : y;
+        if (slopeStep == 0)
+            return x;
+        double y = x;
+        for (int k = 0; k < numBiquads; ++k)
+            y = stages[k].tick (ch, y);
+        if (hasFirstOrder)
+            y = stages[numBiquads].tick (ch, y);
+        return y;
     }
 };
 
@@ -503,12 +567,16 @@ public:
         fs=rate;
         flHeatDsp.prepare(rate, std::max(64, maxBlockSize));
         reset();
-        for (auto* g : { &trim,&output,&heat,&midSmoothed,&sideSmoothed }) g->reset(rate,0.015);
+        for (auto* g : { &trim,&output,&heat }) g->reset(rate,0.015);
+        // Exact OUTPUT Phobos67Processor Sculp Even/Odd & Mid/Side 50 ms smoothing!
+        for (auto* g : { &midSmoothed,&sideSmoothed,&evenSmoothed,&oddSmoothed }) g->reset(rate,0.050);
         trim.setCurrentAndTargetValue(gain(raw[preamp]->load()));
         heat.setCurrentAndTargetValue(gain(raw[drive]->load())-1);
         output.setCurrentAndTargetValue(outputGain(raw[fader]->load(),raw[compMakeup]->load()));
-        midSmoothed.setCurrentAndTargetValue(gain(raw[midGain]->load()));
-        sideSmoothed.setCurrentAndTargetValue(gain(raw[sideGain]->load()));
+        evenSmoothed.setCurrentAndTargetValue(juce::roundToInt(raw[evenHarmonics]->load()) * 0.01f);
+        oddSmoothed.setCurrentAndTargetValue(juce::roundToInt(raw[oddHarmonics]->load()) * 0.01f);
+        midSmoothed.setCurrentAndTargetValue(juce::Decibels::decibelsToGain(raw[midGain]->load()));
+        sideSmoothed.setCurrentAndTargetValue(juce::Decibels::decibelsToGain(raw[sideGain]->load()));
         inflator.prepare(rate);
         inflator.effectCurrent = raw[inflateEffect]->load() / 100.0;
         inflator.curveCurrent  = (raw[inflateCurve]->load() + 50.0) / 100.0;
@@ -553,14 +621,18 @@ public:
         const float blockRmsInL = numSamples > 0 ? static_cast<float>(std::sqrt(sumSqInL / numSamples)) : 0.0f;
         const float blockRmsInR = numSamples > 0 ? static_cast<float>(std::sqrt(sumSqInR / numSamples)) : 0.0f;
 
-        // 1. Run exact 1:1 FL HEAT (Ocelot LUT + Drive/Tone + selectable 1x/2x/4x/8x Oversampling) at the input stage when active
-        const float hDrive = v[heatDrive];
-        const float hTone  = v[heatTone];
-        const bool  hByp   = v[heatBypass] > 0.5f;
-        const int   osMode = juce::jlimit(0, 3, int(v[oversampling]));
-        flHeatDsp.setParameters(hDrive, hTone, hByp, osMode);
-        if (!hByp && std::abs(hDrive) > 0.001f)
+        // 1. Color Stage right after Input Trim:
+        //    - When heatBypass == false (HEAT mode): run exact 1:1 FL HEAT (Ocelot LUT + Drive/Tone)
+        //    - When heatBypass == true  (EVEN/ODD mode): run exact 1:1 OUTPUT Even & Odd Harmonics exciter!
+        const float hDrive     = v[heatDrive];
+        const float hTone      = v[heatTone];
+        const bool  evenOddMode = v[heatBypass] > 0.5f;
+        const int   osMode     = juce::jlimit(0, 3, int(v[oversampling]));
+        flHeatDsp.setParameters(hDrive, hTone, evenOddMode, osMode);
+        if (!evenOddMode && std::abs(hDrive) > 0.001f)
             flHeatDsp.processBlock(main);
+        evenSmoothed.setTargetValue(evenOddMode ? (juce::roundToInt(v[evenHarmonics]) * 0.01f) : 0.0f);
+        oddSmoothed.setTargetValue(evenOddMode  ? (juce::roundToInt(v[oddHarmonics])  * 0.01f) : 0.0f);
 
         const bool external=v[extSidechain]>0.5f && sc.getNumChannels()>0;
         const bool rmsDetector=v[compMode]>0.5f;
@@ -608,13 +680,21 @@ public:
         const bool eqInSc = eqActive && v[eqDynSc]>0.5f;
         const bool fltPre = v[fltPreDyn]>0.5f && !fltInSc;
         const bool eqPre = eqActive && v[eqPreDyn]>0.5f && !eqInSc;
-        const int slopeIdx = int(v[filterSlope]);
-        const bool on[]={v[hpf]>20,v[lpf]<20000,eqActive && eq[2]!=0,eqActive && eq[3]!=0,eqActive && eq[4]!=0,eqActive && eq[5]!=0};
+        const int legacySlope = int(v[filterSlope]); // 0=6, 1=12, 2=18, 3=24 (default 2)
+        int hpStep = int(v[hpSlopeParam]);
+        int lpStep = int(v[lpSlopeParam]);
+        // If legacy filterSlope was changed from default (2), honor it when hpStep/lpStep are at default (3)
+        if (legacySlope != 2 && hpStep == 3 && lpStep == 3)
+        {
+            hpStep = legacySlope + 1;
+            lpStep = legacySlope + 1;
+        }
+        const bool on[]={v[hpf]>20 && hpStep>0, v[lpf]<20000 && lpStep>0, eqActive && eq[2]!=0, eqActive && eq[3]!=0, eqActive && eq[4]!=0, eqActive && eq[5]!=0};
 
-        if (on[0]) { hpSlope.tune(0, freq[0], slopeIdx, fs); scHpSlope.tune(0, freq[0], slopeIdx, fs); }
+        if (on[0]) { hpSlope.tune(0, freq[0], hpStep, fs); scHpSlope.tune(0, freq[0], hpStep, fs); }
         else       { hpSlope.clear(); scHpSlope.clear(); }
 
-        if (on[1]) { lpSlope.tune(1, freq[1], slopeIdx, fs); scLpSlope.tune(1, freq[1], slopeIdx, fs); }
+        if (on[1]) { lpSlope.tune(1, freq[1], lpStep, fs); scLpSlope.tune(1, freq[1], lpStep, fs); }
         else       { lpSlope.clear(); scLpSlope.clear(); }
 
         for (int j=2;j<6;++j)
@@ -632,19 +712,30 @@ public:
         }
         heat.setTargetValue(gain(v[drive])-1);
         output.setTargetValue(outputGain(v[fader],v[compMakeup]));
-        midSmoothed.setTargetValue(gain(v[midGain]));
-        sideSmoothed.setTargetValue(gain(v[sideGain]));
-        const auto pole=[&](double ms){return std::exp(-1000/(fs*ms));};
-        const auto ca=pole(0.1), cr=pole(v[compRelease]), ga=pole(0.1), gr=pole(v[gateRelease]), rms=pole(10);
+        // 1:1 OUTPUT Sculp Mid/Side target gain (juce::Decibels::decibelsToGain(value("mid")) / ("side"))
+        midSmoothed.setTargetValue(juce::Decibels::decibelsToGain(v[midGain]));
+        sideSmoothed.setTargetValue(juce::Decibels::decibelsToGain(v[sideGain]));
+        const double pole1000 = -1000.0 / fs;
+        const auto ca = std::exp(pole1000 / 0.1);
+        const auto cr = std::exp(pole1000 / double(v[compRelease]));
+        const auto ga = ca;
+        const auto gr = std::exp(pole1000 / double(v[gateRelease]));
+        const auto rms = std::exp(pole1000 / 10.0);
         const bool dynActive = v[dynIn]>0.5f;
-        const bool cmpActive = dynActive && v[cmpIn]>0.5f;
-        const bool expActive = dynActive && v[expIn]>0.5f;
-        const bool deEssActive = v[deEss]>0.5f;
+        const bool cmpActive = dynActive && v[cmpIn]>0.5f && (v[compRatio] > 1.001f);
+        const bool expActive = dynActive && v[expIn]>0.5f && (v[gateRange] > 0.01f);
+        const bool dynNeedsDetector = cmpActive || expActive;
+        const double compRatioInv = 1.0 - 1.0 / double(v[compRatio]);
+        const double compThrLin   = juce::Decibels::decibelsToGain(double(v[compThreshold]), -160.0);
+        const double gateThrLin   = juce::Decibels::decibelsToGain(double(v[gateThreshold]), -160.0);
         const float dsF = v[dsFreq];
         const float dsT = v[dsThresh];
         const int dsSc = int(v[dsScFilter]);
         const int dsMode = int(v[dsAudioMode]);
         const bool dsMon = v[dsMonitor]>0.5f;
+        const bool dsPre = v[dsPrePost]>0.5f;
+        // De-Esser is active when deEss is true and threshold < 0.0 dB (at 0.0 dB threshold it is 100% transparent for signals <= 0 dBFS!)
+        const bool deEssActive = (v[deEss] > 0.5f) && (dsT < -0.05f || dsMon);
 
         const double targetInfEffect = double(v[inflateEffect]) / 100.0;
         const double targetInfCurve  = (double(v[inflateCurve]) + 50.0) / 100.0;
@@ -659,12 +750,23 @@ public:
         {
             double x[2]{},peak=0;
             const auto k=heat.getNextValue();
-            const auto mGain=midSmoothed.getNextValue(), sGain=sideSmoothed.getNextValue();
+            const float vEven = static_cast<float>(evenSmoothed.getNextValue());
+            const float vOdd  = static_cast<float>(oddSmoothed.getNextValue());
+            const float mGain = static_cast<float>(midSmoothed.getNextValue());
+            const float sGain = static_cast<float>(sideSmoothed.getNextValue());
             inflator.effectCurrent += (targetInfEffect - inflator.effectCurrent) * inflator.nativeAlpha;
             inflator.curveCurrent  += (targetInfCurve  - inflator.curveCurrent)  * inflator.nativeAlpha;
             for (int ch=0;ch<channels;++ch)
             {
                 auto y=double(main.getSample(ch,i));
+                // 1:1 OUTPUT Even & Odd Harmonics exciter when in EVEN/ODD mode:
+                // if (v[1]==0.f && v[2]==0.f) x+=0.f; else x = (x + (2*v[1])*(x*x) + (2*v[2])*(x*x*x)) * (1.f / (1 + 1.2f*(v[1]+v[2])));
+                if (vEven > 0.0f || vOdd > 0.0f)
+                {
+                    const float xf = static_cast<float>(y);
+                    const float norm = 1.0f / (1.0f + 1.2f * (vEven + vOdd));
+                    y = static_cast<double>((xf + (2.0f * vEven) * (xf * xf) + (2.0f * vOdd) * (xf * xf * xf)) * norm);
+                }
                 if (model!=0)
                 {
                     y=transformer[1].tick(ch,transformer[0].tick(ch,y))*preGain;
@@ -677,6 +779,19 @@ public:
                 }
                 else if (k>0.00001) y=std::tanh(k*y)/k;
                 blkInPeak = std::max(blkInPeak, float(std::abs(y)));
+                x[ch]=y;
+            }
+            if (channels == 1) x[1] = x[0];
+
+            // PRE DYN ON: De-Esser runs right after FL HEAT and BEFORE Filters, EQ and Compressor!
+            if (deEssActive && dsPre)
+                vocalsDeEsser.processSample(x[0], x[1], dsF, dsT, dsSc, dsMode, dsMon, true);
+            else if (!deEssActive)
+                vocalsDeEsser.currentAttenDb = 0.0f;
+
+            for (int ch=0;ch<channels;++ch)
+            {
+                double y = x[ch];
                 if (fltPre)
                 {
                     if (on[0]) y=hpSlope.tick(ch,y);
@@ -690,39 +805,53 @@ public:
                 x[ch]=y;
             }
             if (channels == 1) x[1] = x[0];
-            if (deEssActive)
-                vocalsDeEsser.processSample(x[0], x[1], dsF, dsT, dsSc, dsMode, dsMon, true);
-            else
-                vocalsDeEsser.currentAttenDb = 0.0f;
 
-            for(int ch=0;ch<channels;++ch)
+            double dynGain = 1.0;
+            if (dynNeedsDetector || reduction > 1.0e-5 || attenuation > 1.0e-5)
             {
-                double det = x[ch];
-                if (fltInSc)
+                for(int ch=0;ch<channels;++ch)
                 {
-                    if (on[0]) det=scHpSlope.tick(ch,det);
-                    if (on[1]) det=scLpSlope.tick(ch,det);
+                    double det = x[ch];
+                    if (fltInSc)
+                    {
+                        if (on[0]) det=scHpSlope.tick(ch,det);
+                        if (on[1]) det=scLpSlope.tick(ch,det);
+                    }
+                    if (eqInSc)
+                    {
+                        for (int j=2;j<6;++j) if (on[j]) det=scFilters[j].tick(ch,det);
+                    }
+                    peak=std::max(peak,std::abs(det));
                 }
-                if (eqInSc)
+                if (external)
                 {
-                    for (int j=2;j<6;++j) if (on[j]) det=scFilters[j].tick(ch,det);
+                    peak=0; for (int ch=0;ch<sc.getNumChannels();++ch) peak=std::max(peak,std::abs(double(sc.getSample(ch,i))));
                 }
-                peak=std::max(peak,std::abs(det));
+                power=rms*power+(1-rms)*peak*peak;
+                double target = 0.0;
+                double gate   = 0.0;
+                if ((cmpActive && (rmsDetector ? (power > compThrLin * compThrLin * 0.25) : (peak > compThrLin)))
+                    || (expActive && peak < gateThrLin))
+                {
+                    const double level = juce::Decibels::gainToDecibels(peak,-160.0);
+                    if (cmpActive)
+                    {
+                        double over=(rmsDetector ? juce::Decibels::gainToDecibels(std::sqrt(power),-160.0) : level)-v[compThreshold];
+                        if (rmsDetector && over>-3 && over<3) over=(over+3)*(over+3)/12;
+                        else over=std::max(0.0,over);
+                        target = over * compRatioInv;
+                    }
+                    if (expActive && level < v[gateThreshold])
+                    {
+                        gate = (v[gateMode]<0.5f) ? double(v[gateRange]) : std::min(double(v[gateRange]), v[gateThreshold]-level);
+                    }
+                }
+                reduction=target+(target>reduction ? ca : cr)*(reduction-target);
+                attenuation=gate+(gate<attenuation ? ga : gr)*(attenuation-gate);
+                const double totalGrDb = attenuation + reduction;
+                if (totalGrDb > 1.0e-5)
+                    dynGain = gain(-totalGrDb);
             }
-            if (external)
-            {
-                peak=0; for (int ch=0;ch<sc.getNumChannels();++ch) peak=std::max(peak,std::abs(double(sc.getSample(ch,i))));
-            }
-            power=rms*power+(1-rms)*peak*peak;
-            const double level=juce::Decibels::gainToDecibels(peak,-160.0);
-            double over=(rmsDetector ? juce::Decibels::gainToDecibels(std::sqrt(power),-160.0) : level)-v[compThreshold];
-            if (rmsDetector && over>-3 && over<3) over=(over+3)*(over+3)/12;
-            else over=std::max(0.0,over);
-            const double target=cmpActive ? over*(1-1.0/v[compRatio]) : 0.0;
-            const double gate=!expActive || level>=v[gateThreshold] ? 0.0 : (v[gateMode]<0.5f ? double(v[gateRange]) : std::min(double(v[gateRange]),v[gateThreshold]-level));
-            reduction=target+(target>reduction ? ca : cr)*(reduction-target);
-            attenuation=gate+(gate<attenuation ? ga : gr)*(attenuation-gate);
-            const double dynGain = gain(-attenuation-reduction);
             const auto faderGain = output.getNextValue();
 
             double outCh[2]{};
@@ -741,18 +870,23 @@ public:
                 }
                 outCh[ch] = y;
             }
+            if (channels == 1) outCh[1] = outCh[0];
 
+            // PRE DYN OFF (Post): De-Esser runs after Comp/EQ and RIGHT BEFORE OUTPUT Sculp Mid/Side!
+            if (deEssActive && !dsPre)
+                vocalsDeEsser.processSample(outCh[0], outCh[1], dsF, dsT, dsSc, dsMode, dsMon, true);
+
+            // 1:1 OUTPUT Sculp Mid/Side Matrix:
+            // float mid=(l+r)*.5f*v[3], side=(l-r)*.5f*v[4]; l=mid+side; r=mid-side;
             if (msActive)
             {
-                const double lIn = outCh[0];
-                const double rIn = (channels >= 2) ? outCh[1] : outCh[0];
-                // Exact OUTPUT Phobos67Processor Mid/Side matrix:
-                // float mid=(l+r)*.5f*v[3], side=(l-r)*.5f*v[4]; l=mid+side; r=mid-side;
-                const double mid  = (lIn + rIn) * 0.5 * mGain;
-                const double side = (lIn - rIn) * 0.5 * sGain;
-                outCh[0] = mid + side;
+                const float l = static_cast<float>(outCh[0]);
+                const float r = static_cast<float>((channels >= 2) ? outCh[1] : outCh[0]);
+                const float mid  = (l + r) * 0.5f * mGain;
+                const float side = (l - r) * 0.5f * sGain;
+                outCh[0] = static_cast<double>(mid + side);
                 if (channels >= 2)
-                    outCh[1] = mid - side;
+                    outCh[1] = static_cast<double>(mid - side);
             }
 
             for (int ch=0;ch<channels;++ch)
@@ -823,7 +957,7 @@ private:
     VocalsDeEsser vocalsDeEsser{};
     OutputInflator inflator{};
     WarmAnalogNoise warmNoise{};
-    juce::SmoothedValue<double> trim,output,heat,midSmoothed,sideSmoothed;
+    juce::SmoothedValue<double> trim,output,heat,midSmoothed,sideSmoothed,evenSmoothed,oddSmoothed;
     double fs=44100,reduction=0,attenuation=0,power=0;
 };
 }

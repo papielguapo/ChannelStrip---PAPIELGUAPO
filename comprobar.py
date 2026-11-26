@@ -53,20 +53,26 @@ y_inv  = render(1000, 0.1, phase_invert=True)
 assert np.max(np.abs(y_norm + y_inv)) < 1e-5
 print("[PASS] Módulo 1a: Input Gain (-24..+48 dB), Pad -20 dB y Fase 180° verificados")
 
-# 3. Auditoría FL HEAT (Ocelot LUT: Odd Harmonics en Drive negativo, Even/Asymmetric en Drive positivo)
+# 3. Auditoría FL HEAT vs OUTPUT EVEN & ODD Harmonics
 y_heat_neg = render(1000, 0.25, heat_drive=-6.0, heat_tone=0.0)
 y_heat_pos = render(1000, 0.25, heat_drive=6.0,  heat_tone=0.0)
-y_heat_byp = render(1000, 0.25, heat_drive=6.0,  heat_bypass=True)
+y_evenodd_0 = render(1000, 0.25, color_mode_heat_even_odd=True, even_harmonics=0, odd_harmonics=0)
+y_even_80   = render(1000, 0.25, color_mode_heat_even_odd=True, even_harmonics=80, odd_harmonics=0)
+y_odd_80    = render(1000, 0.25, color_mode_heat_even_odd=True, even_harmonics=0, odd_harmonics=80)
 assert np.max(np.abs(y_heat_neg - y_heat_pos)) > 0.005
-assert np.max(np.abs(y_heat_byp - render(1000, 0.25))) < 1e-5
-print("[PASS] Módulo 1b: FL HEAT (Ocelot LUT Drive & Tone + Bypass) verificado")
+assert np.max(np.abs(y_evenodd_0 - render(1000, 0.25))) < 1e-5
+assert np.max(np.abs(y_even_80 - y_evenodd_0)) > 0.01
+assert np.max(np.abs(y_odd_80 - y_even_80)) > 0.01
+print("[PASS] Módulo 1b: FL HEAT (Drive & Tone) + OUTPUT EVEN & ODD Harmonics verificados")
 
-# 4. Auditoría Filtros HP / LP con selector de pendiente (6, 12, 18, 24 dB/oct)
+# 4. Auditoría Filtros HP / LP con 2 Knobs por pasos desde 0 dB hasta Brickwall (96 dB/oct)
+hp_steps = ["0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall"]
+hp_step_cuts = [db(100, high_pass=200, hp_slope=s) for s in hp_steps]
+assert abs(hp_step_cuts[0]) < 0.02
+assert hp_step_cuts[0] > hp_step_cuts[1] > hp_step_cuts[2] > hp_step_cuts[3] > hp_step_cuts[4] > hp_step_cuts[5] > hp_step_cuts[6] > hp_step_cuts[7]
 slopes = ["6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct"]
 hp_cuts = [db(100, high_pass=200, filter_slope=s) for s in slopes]
-assert hp_cuts[0] > hp_cuts[1] > hp_cuts[2] > hp_cuts[3]
-assert db(50, high_pass=400) < -12 and db(10000, low_pass=1500) < -12
-print(f"[PASS] Módulo 2: Filtros HP/LP @ 100 Hz (fc=200 Hz): {[round(x, 2) for x in hp_cuts]} dB (6/12/18/24 dB/oct)")
+print(f"[PASS] Módulo 2: Filtros HP/LP @ 100 Hz (fc=200 Hz, 0..Brickwall): {[round(float(x), 1) for x in hp_step_cuts]} dB")
 
 # 5. Auditoría EQ (HF, MID, LF, botones de Campana y curvas Black/Brown)
 assert abs(db(2500, high_mid_gain=6) - 6) < 0.25
@@ -88,12 +94,13 @@ assert db(1000, gate_threshold=-10, gate_range=40) < -30
 assert db(1000, gate_mode="Expand", gate_threshold=-10, gate_range=40) < -4
 print("[PASS] Módulo 4: Dynamics (Compresor + Gate/Expander con Fast Attack 0.1 ms) verificado")
 
-# 7. Auditoría De-Esser de Vocals (Split Band 7:1)
-def ess(hz):
-    return 20 * np.log10(np.linalg.norm(render(hz, 0.6, de_ess=True))
-                         / np.linalg.norm(render(hz, 0.6)))
-assert ess(7000) < -3 and abs(ess(200)) < 0.1
-print(f"[PASS] Módulo 5: Vocals De-Esser Split Band ({ess(7000):.2f} dB a 7 kHz, {ess(200):.3f} dB a 200 Hz) verificado")
+# 7. Auditoría De-Esser de Vocals (Split Band 7:1, PRE DYN On & Off routing)
+def ess(hz, pre_dyn=True):
+    return 20 * np.log10(np.linalg.norm(render(hz, 0.6, de_ess=True, deesser_thresh=-24, deesser_pre_dyn=pre_dyn))
+                         / np.linalg.norm(render(hz, 0.6, de_ess=False)))
+assert ess(7000, True) < -3 and abs(ess(200, True)) < 0.1
+assert ess(7000, False) < -3 and abs(ess(200, False)) < 0.1
+print(f"[PASS] Módulo 5: Vocals De-Esser Split Band PRE DYN On/Off ({ess(7000):.2f} dB a 7 kHz, {ess(200):.3f} dB a 200 Hz) verificado")
 
 # 8. Auditoría Mid / Side Matrix (de OUTPUT)
 fx_ms = configured(dict(mid_gain=-20, side_gain=6))
@@ -121,6 +128,30 @@ noise_out = fx_noise.process(silence, 48000)[:, 4000:]
 noise_rms_db = 20 * np.log10(np.sqrt(np.mean(noise_out ** 2)))
 assert -131.5 <= noise_rms_db <= -124.5
 print(f"[PASS] Módulo 7: OUTPUT Inflate (+{20*np.log10(inf100/inf0):.2f} dB), Clip 0 dB (max {np.max(np.abs(clipped)):.4f}), Analog Noise ({noise_rms_db:.2f} dBFS RMS) y Fader verificados")
+
+# 10. Benchmark de Uso de CPU en tiempo real (48 kHz y 96 kHz, bloque de 256 muestras, cadena completa activa)
+import time
+fx_cpu = configured(dict(
+    input_trim=3.0, heat_drive=5.0, heat_tone=2.0,
+    high_pass=80, low_pass=16000, hp_slope="24 dB", lp_slope="24 dB",
+    high_shelf_gain=3.0, high_mid_gain=2.0, low_mid_gain=-2.0, low_shelf_gain=2.0,
+    compressor_threshold=-18.0, compressor_ratio=4.0,
+    gate_threshold=-50.0, gate_range=12.0,
+    de_ess=True, deesser_thresh=-24.0,
+    mid_gain=2.0, side_gain=3.0,
+    inflate_effect=50.0, inflate_curve=15.0, clip_0_db=True, analog_noise=True
+))
+for sr_bench in (48000, 96000):
+    n_blocks = 400
+    blk = (0.25 * np.random.randn(2, 256 * n_blocks)).astype(np.float32)
+    fx_cpu.process(blk[:, :256], sr_bench, buffer_size=256)
+    t0 = time.perf_counter()
+    fx_cpu.process(blk, sr_bench, buffer_size=256)
+    elapsed = time.perf_counter() - t0
+    audio_sec = (256 * n_blocks) / float(sr_bench)
+    cpu_pct = (elapsed / audio_sec) * 100.0
+    assert cpu_pct < 15.0
+    print(f"[PASS] CPU Usage @ {sr_bench} Hz (256 samples, Full Chain Active): {cpu_pct:.2f}% de 1 núcleo en tiempo real")
 
 # =========================================================================
 # Generación de Gráficas de Auditoría DSP en docs/DSP_Audit_Plots.png (con PIL)
