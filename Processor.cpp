@@ -74,13 +74,13 @@ State::ParameterLayout layout()
     add (highFreq, "High shelf frequency", 1500, 18000, 8000, "Hz", true);
     add (highGain, "High shelf gain", -18, 18, 0, "dB");
     choice (compMode, "Compressor detector", { "Peak", "RMS" });
-    add (compThreshold, "Compressor threshold", -60, 0, -18, "dB");
+    add (compThreshold, "Compressor threshold", -60, 0, 0, "dB");
     add (compRatio, "Compressor ratio", 1, 20, 1, ":1", true);
     add (compAttack, "Compressor attack", 0.1f, 100, 0.1f, "ms", true);
     add (compRelease, "Compressor release", 10, 2000, 100, "ms", true);
     add (compMakeup, "Compressor makeup", -20, 20, 0, "dB");
     choice (gateMode, "Gate mode", { "Gate", "Expand" });
-    add (gateThreshold, "Gate threshold", -80, 0, -45, "dB");
+    add (gateThreshold, "Gate threshold", -80, 0, -80, "dB");
     add (gateRange, "Gate range", 0, 80, 0, "dB");
     add (gateAttack, "Gate attack", 0.1f, 50, 0.1f, "ms", true);
     add (gateRelease, "Gate release", 5, 2000, 150, "ms", true);
@@ -93,7 +93,7 @@ State::ParameterLayout layout()
 
     // Console switches
     flag (phaseInv, "Phase invert", false);
-    flag (pad20, "Pad -20 dB", false);
+    flag (pad20, "Mono", false);
     flag (hfBell, "HF Bell", false);
     flag (lfBell, "LF Bell", false);
     flag (eqIn, "EQ In", true);
@@ -105,8 +105,8 @@ State::ParameterLayout layout()
     flag (fltDynSc, "Filters Dyn SC", false);
     flag (fltPreDyn, "Filters Pre Dyn", true);
     choice (filterSlope,  "Filter slope", { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct" }, 2);
-    choice (hpSlopeParam, "HP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 3);
-    choice (lpSlopeParam, "LP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 3);
+    choice (hpSlopeParam, "HP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 0);
+    choice (lpSlopeParam, "LP Slope",     { "0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickwall" }, 0);
 
     // Vocals De-Esser Stage parameters
     add (dsFreq, "DeEsser Freq", 3000.0f, 12000.0f, 6200.0f, "Hz", true);
@@ -600,21 +600,37 @@ public:
         const int channels=main.getNumChannels();
         const int numSamples=main.getNumSamples();
 
-        // 0. High-gain Input Trim (-24 to +48 dB) + Phase Invert + Pad (-20 dB) BEFORE Input Meter & BEFORE FL HEAT!
-        const double padSign = (v[phaseInv]>0.5f ? -1.0 : 1.0) * (v[pad20]>0.5f ? 0.1 : 1.0);
-        trim.setTargetValue(gain(v[preamp]) * padSign);
+        // 0. High-gain Input Trim (-24 to +48 dB) + Phase Invert + MONO sum BEFORE Input Meter & BEFORE FL HEAT!
+        const double phaseSign = (v[phaseInv]>0.5f ? -1.0 : 1.0);
+        const bool monoActive  = (v[pad20] > 0.5f);
+        trim.setTargetValue(gain(v[preamp]) * phaseSign);
         float rawInL = 0.0f, rawInR = 0.0f;
         double sumSqInL = 0.0, sumSqInR = 0.0;
         for (int i = 0; i < numSamples; ++i)
         {
             const float inGain = static_cast<float>(trim.getNextValue());
-            for (int ch = 0; ch < channels; ++ch)
+            if (monoActive && channels >= 2)
             {
-                const float s = main.getSample(ch, i) * inGain;
-                main.setSample(ch, i, s);
-                const float absS = std::abs(s);
-                if (ch == 0) { rawInL = std::max(rawInL, absS); sumSqInL += double(s) * double(s); }
-                else         { rawInR = std::max(rawInR, absS); sumSqInR += double(s) * double(s); }
+                const float m = 0.5f * (main.getSample(0, i) + main.getSample(1, i)) * inGain;
+                for (int ch = 0; ch < channels; ++ch)
+                    main.setSample(ch, i, m);
+                const float absM = std::abs(m);
+                rawInL = std::max(rawInL, absM);
+                rawInR = std::max(rawInR, absM);
+                const double sqM = double(m) * double(m);
+                sumSqInL += sqM;
+                sumSqInR += sqM;
+            }
+            else
+            {
+                for (int ch = 0; ch < channels; ++ch)
+                {
+                    const float s = main.getSample(ch, i) * inGain;
+                    main.setSample(ch, i, s);
+                    const float absS = std::abs(s);
+                    if (ch == 0) { rawInL = std::max(rawInL, absS); sumSqInL += double(s) * double(s); }
+                    else         { rawInR = std::max(rawInR, absS); sumSqInR += double(s) * double(s); }
+                }
             }
         }
         if (channels == 1) { rawInR = rawInL; sumSqInR = sumSqInL; }
@@ -678,13 +694,15 @@ public:
         const bool eqActive = v[eqIn]>0.5f;
         const bool fltInSc = v[fltDynSc]>0.5f;
         const bool eqInSc = eqActive && v[eqDynSc]>0.5f;
-        const bool fltPre = v[fltPreDyn]>0.5f && !fltInSc;
+        // HP/LP filters ALWAYS stay in the main audio path (pre or post dynamics via fltPreDyn),
+        // AND when COMP SC (fltDynSc) is active, the parallel scHpSlope/scLpSlope filters also filter the detector!
+        const bool fltPre = v[fltPreDyn]>0.5f;
         const bool eqPre = eqActive && v[eqPreDyn]>0.5f && !eqInSc;
         const int legacySlope = int(v[filterSlope]); // 0=6, 1=12, 2=18, 3=24 (default 2)
         int hpStep = int(v[hpSlopeParam]);
         int lpStep = int(v[lpSlopeParam]);
-        // If legacy filterSlope was changed from default (2), honor it when hpStep/lpStep are at default (3)
-        if (legacySlope != 2 && hpStep == 3 && lpStep == 3)
+        // If legacy filterSlope was explicitly changed from default (2), honor it when hpStep/lpStep are at default (0)
+        if (legacySlope != 2 && hpStep == 0 && lpStep == 0)
         {
             hpStep = legacySlope + 1;
             lpStep = legacySlope + 1;
@@ -725,7 +743,8 @@ public:
         const bool cmpActive = dynActive && v[cmpIn]>0.5f && (v[compRatio] > 1.001f);
         const bool expActive = dynActive && v[expIn]>0.5f && (v[gateRange] > 0.01f);
         const bool dynNeedsDetector = cmpActive || expActive;
-        const double compRatioInv = 1.0 - 1.0 / double(v[compRatio]);
+        // At 20:0 (compRatio >= 19.95), full limiting slope (1.0); from 1:1 to <20:0, standard ratio 1 - 1/R
+        const double compRatioInv = (v[compRatio] >= 19.95f) ? 1.0 : (1.0 - 1.0 / double(v[compRatio]));
         const double compThrLin   = juce::Decibels::decibelsToGain(double(v[compThreshold]), -160.0);
         const double gateThrLin   = juce::Decibels::decibelsToGain(double(v[gateThreshold]), -160.0);
         const float dsF = v[dsFreq];
@@ -811,7 +830,9 @@ public:
             {
                 for(int ch=0;ch<channels;++ch)
                 {
-                    double det = x[ch];
+                    double det = external
+                               ? double(sc.getSample(std::min(ch, sc.getNumChannels() - 1), i))
+                               : x[ch];
                     if (fltInSc)
                     {
                         if (on[0]) det=scHpSlope.tick(ch,det);
@@ -822,10 +843,6 @@ public:
                         for (int j=2;j<6;++j) if (on[j]) det=scFilters[j].tick(ch,det);
                     }
                     peak=std::max(peak,std::abs(det));
-                }
-                if (external)
-                {
-                    peak=0; for (int ch=0;ch<sc.getNumChannels();++ch) peak=std::max(peak,std::abs(double(sc.getSample(ch,i))));
                 }
                 power=rms*power+(1-rms)*peak*peak;
                 double target = 0.0;
@@ -858,7 +875,7 @@ public:
             for (int ch=0;ch<channels;++ch)
             {
                 double y = dynGain * x[ch];
-                if (!fltPre && !fltInSc)
+                if (!fltPre)
                 {
                     if (on[0]) y=hpSlope.tick(ch,y);
                     if (on[1]) y=lpSlope.tick(ch,y);

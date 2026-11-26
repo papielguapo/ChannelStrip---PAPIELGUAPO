@@ -10,8 +10,8 @@
 
 ![Auditoría DSP de Módulos](docs/DSP_Audit_Plots.png)
 
-### 1. Entrada de Alta Ganancia (`INPUT +48 dB`) + Medidor Pre-HEAT (`IN / OUT` & `-18 dBFS RMS VU`)
-- **`INPUT +48 dB` (`-24 dB` a `+48 dB`)**: Etapa de ganancia de entrada de alto margen situada **antes del medidor de entrada** y antes de `FL HEAT`, acompañada de los botones **`FASE 180°`** (inversión de polaridad exacta) y **`PAD -20 dB`**.
+### 1. Entrada de Alta Ganancia (`INPUT +48 dB`) + `OVER` LED + `MONO` + Medidor Pre-HEAT (`IN / OUT` & `-18 dBFS RMS VU`)
+- **`INPUT +48 dB` (`-24 dB` a `+48 dB`)**: Etapa de ganancia de entrada de alto margen situada **antes del medidor de entrada** y antes de `FL HEAT`, con el indicador LED rojo **`OVER`** de sobrecarga junto al knob de entrada, acompañada de los botones **`FASE 180°`** (inversión de polaridad exacta) y **`MONO`** (suma mono `(L + R) * 0.5`).
 - **Conmutador `METER: IN` / `METER: OUT`**: Permite visualizar cómo entra la señal tras el knob de `INPUT` antes de tocar `FL HEAT`, EQ o dinámica (`IN`), o bien monitorizar la salida final (`OUT`).
 - **Calibración `-18 RMS VU` / `dBFS PEAK`**: Botón dedicado que alterna tanto la escalera principal de 8 LEDs + pantalla digital como el medidor estéreo **L / R** junto al knob `OUTPUT` entre **Pico Digital (`dBFS PEAK`)** y **RMS Calibrado a `-18 dBFS = 0 VU` (`-18 RMS VU`)** con línea blanca de referencia en `0 VU` para clavar el nivel de voces y buses.
 
@@ -64,7 +64,7 @@
 | Prueba de Auditoría | Resultado Medido | Estado |
 | :--- | :--- | :---: |
 | Paso transparente a `44.1 / 48 / 96 kHz` (Mono y Estéreo) | Error `< 1e-5` (bit-transparente en valores por defecto) | **OK** |
-| `INPUT +48 dB` + `PAD -20 dB` + `FASE 180°` | `+24.00 dB`, `+4.00 dB` con Pad, cancelación nula `0.00000` en inversión | **OK** |
+| `INPUT +48 dB` + `MONO` + `FASE 180°` | `+24.00 dB`, suma mono exacta `(L+R)*0.5`, cancelación nula `0.00000` en inversión | **OK** |
 | `FL HEAT` (`Heat Drive` `-6` vs `+6`, `Heat Tone`, `Bypass`) | Diferencia armónica par/impar verificada; bypass exacto | **OK** |
 | Filtros `HP / LP` con 4 pendientes (`6, 12, 18, 24 dB/oct`) | Atenuación progresiva a 1 octava: `-6.99`, `-12.31`, `-18.13`, `-24.10 dB` | **OK** |
 | `EQ` (`HF`, `MID`, `LF`, `Campana` y curvas `Black / Brown`) | Precisión `< 0.15 dB`, diferenciación `BLK/BRN` y `Shelf/Bell` verificada | **OK** |

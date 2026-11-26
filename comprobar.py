@@ -45,13 +45,21 @@ def db(hz, **settings):
     return 20 * np.log10(np.sqrt(np.mean(y ** 2)) * np.sqrt(2) / 0.1)
 
 
-# 2. Auditoría Input Gain (+48 dB max) + Pad (-20 dB) + Phase Invert (180°)
+# 2. Auditoría Input Gain (+48 dB max) + MONO sum + Phase Invert (180°)
 assert abs(db(1000, input_trim=24) - 24.0) < 0.05
-assert abs(db(1000, input_trim=24, pad_20_db=True) - 4.0) < 0.05
+fx_mono = configured(dict(mono=True))
+t_mono = np.arange(4800, dtype=np.float32) / 48000.0
+stereo_diff = np.vstack([
+    0.4 * np.sin(2 * np.pi * 440 * t_mono),
+    0.1 * np.cos(2 * np.pi * 880 * t_mono),
+]).astype(np.float32)
+mono_out = fx_mono.process(stereo_diff, 48000)
+np.testing.assert_allclose(mono_out[0], mono_out[1], atol=1e-6)
+np.testing.assert_allclose(mono_out[0], 0.5 * (stereo_diff[0] + stereo_diff[1]), atol=1e-5)
 y_norm = render(1000, 0.1)
 y_inv  = render(1000, 0.1, phase_invert=True)
 assert np.max(np.abs(y_norm + y_inv)) < 1e-5
-print("[PASS] Módulo 1a: Input Gain (-24..+48 dB), Pad -20 dB y Fase 180° verificados")
+print("[PASS] Módulo 1a: Input Gain (-24..+48 dB), MONO (L+R)*0.5 y Fase 180° verificados")
 
 # 3. Auditoría FL HEAT vs OUTPUT EVEN & ODD Harmonics
 y_heat_neg = render(1000, 0.25, heat_drive=-6.0, heat_tone=0.0)
@@ -70,8 +78,8 @@ hp_steps = ["0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "Brickw
 hp_step_cuts = [db(100, high_pass=200, hp_slope=s) for s in hp_steps]
 assert abs(hp_step_cuts[0]) < 0.02
 assert hp_step_cuts[0] > hp_step_cuts[1] > hp_step_cuts[2] > hp_step_cuts[3] > hp_step_cuts[4] > hp_step_cuts[5] > hp_step_cuts[6] > hp_step_cuts[7]
-slopes = ["6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct"]
-hp_cuts = [db(100, high_pass=200, filter_slope=s) for s in slopes]
+slopes = ["6 dB", "12 dB", "18 dB", "24 dB"]
+hp_cuts = [db(100, high_pass=200, hp_slope=s) for s in slopes]
 print(f"[PASS] Módulo 2: Filtros HP/LP @ 100 Hz (fc=200 Hz, 0..Brickwall): {[round(float(x), 1) for x in hp_step_cuts]} dB")
 
 # 5. Auditoría EQ (HF, MID, LF, botones de Campana y curvas Black/Brown)
@@ -84,15 +92,20 @@ assert db(16000, high_shelf_gain=-3.5, high_shelf_frequency=2000) < -3
 assert abs(db(16000, high_shelf_gain=-6.0, high_shelf_frequency=4000, hf_bell=True)) > -3.0
 print("[PASS] Módulo 3: EQ (HF/MID/LF, Shelf continuo + Campana por pasos 1 dB + Curvas Black/Brown) verificado")
 
-# 6. Auditoría Compresor & Gate/Expander con Ataque Fijo Ultra-Rápido (0.1 ms)
+# 6. Auditoría Compresor & Gate/Expander con Ataque Fijo Ultra-Rápido (0.1 ms) + COMP SC en paralelo
 assert db(1000, compressor_threshold=-40, compressor_ratio=8) < -10
+assert db(1000, compressor_threshold=-40, compressor_ratio=20) < db(1000, compressor_threshold=-40, compressor_ratio=8)
+# Verificar que al activar COMP SC (filters_dyn_sc=True), los filtros HP/LP siguen limpiando el audio Y además filtran el detector
+cut_main_only = db(80, high_pass=250, hp_slope="24 dB", filters_dyn_sc=False)
+cut_with_sc   = db(80, high_pass=250, hp_slope="24 dB", filters_dyn_sc=True)
+assert cut_main_only < -15.0 and abs(cut_main_only - cut_with_sc) < 0.05
 burst = np.zeros(4800, dtype="float32")
 burst[2400:] = 0.6 * np.sin(2 * np.pi * np.arange(2400) / 48)
 fx_fast = configured(dict(compressor_threshold=-30, compressor_ratio=10))
 assert np.max(np.abs(fx_fast.process(burst, 48000)[2448:2640])) < 0.22
 assert db(1000, gate_threshold=-10, gate_range=40) < -30
 assert db(1000, gate_mode="Expand", gate_threshold=-10, gate_range=40) < -4
-print("[PASS] Módulo 4: Dynamics (Compresor + Gate/Expander con Fast Attack 0.1 ms) verificado")
+print("[PASS] Módulo 4: Dynamics (Compresor RATE 1:1..20:0 + Gate/Expander + COMP SC en paralelo + Fast Attack 0.1 ms) verificado")
 
 # 7. Auditoría De-Esser de Vocals (Split Band 7:1, PRE DYN On & Off routing)
 def ess(hz, pre_dyn=True):
@@ -208,7 +221,7 @@ def plot_curve(panel_idx, xs, ys, xmin, xmax, ymin, ymax, color, log_x=False):
 freqs = np.geomspace(25, 16000, 14)
 cols = [(110, 231, 85), (66, 165, 245), (255, 158, 44), (239, 83, 80)]
 for s, col in zip(slopes, cols):
-    resp = [db(f, high_pass=180, filter_slope=s) for f in freqs]
+    resp = [db(f, high_pass=180, hp_slope=s) for f in freqs]
     plot_curve(0, freqs, resp, 25, 16000, -36, 3, col, log_x=True)
 
 # Panel 2: EQ Black vs Brown vs Bell

@@ -411,10 +411,11 @@ public:
 };
 
 // =========================================================================
-// Functional Rotary Knob:
+// Functional Rotary Knob (Uniform 52x52 across the entire plugin):
 // - Click & Drag anywhere on the knob (vertical or horizontal) to move it smoothly!
 // - Scroll Mouse Wheel over the knob to step/adjust the value!
-// - Double-click or Right-click to type a numeric value directly.
+// - Double-click right mouse button (or double-click) to reset the knob to its default value!
+// - Single right-click or left double-click to type a numeric value directly.
 // =========================================================================
 class ConsoleDial final : public Slider
 {
@@ -433,6 +434,27 @@ public:
         setPopupDisplayEnabled (true, true, nullptr);
     }
 
+    void bindResetParameter (RangedAudioParameter* param) noexcept
+    {
+        boundParam = param;
+    }
+
+    void resetToDefaultValue()
+    {
+        hideTextBox (true);
+        if (boundParam != nullptr)
+        {
+            const float defNorm = boundParam->getDefaultValue();
+            boundParam->beginChangeGesture();
+            boundParam->setValueNotifyingHost (defNorm);
+            boundParam->endChangeGesture();
+        }
+        else if (isDoubleClickReturnEnabled())
+        {
+            setValue (getDoubleClickReturnValue(), sendNotificationSync);
+        }
+    }
+
     bool hitTest (int x, int y) override
     {
         return getLocalBounds().contains (x, y);
@@ -440,8 +462,16 @@ public:
 
     void mouseDown (const MouseEvent& e) override
     {
-        if (e.mods.isRightButtonDown())
+        if (e.mods.isRightButtonDown() || e.mods.isPopupMenu())
         {
+            const uint32 nowMs = Time::getMillisecondCounter();
+            if (nowMs - lastRightClickMs <= 420)
+            {
+                lastRightClickMs = 0;
+                resetToDefaultValue();
+                return;
+            }
+            lastRightClickMs = nowMs;
             Slider::mouseDown (e);
             if (!e.mods.isCommandDown() && !e.mods.isCtrlDown() && !e.mods.isAltDown())
                 showTextBox();
@@ -457,7 +487,7 @@ public:
     {
         if (!isDraggingDial || e.mods.isRightButtonDown())
             return;
-        // e.position is already in local unscaled component coordinates (60x60 / 48x48),
+        // e.position is already in local unscaled component coordinates (52x52),
         // so dragging 100 local units moves full range identically at ANY window scale (0.55x..1.35x)!
         const float sensitivity = e.mods.isShiftDown() ? 360.0f : 105.0f;
         const float dy = e.position.y - dragStartPt.y;
@@ -491,15 +521,78 @@ public:
         if (onDragEnd != nullptr) onDragEnd();
     }
 
-    void mouseDoubleClick (const MouseEvent&) override
+    void mouseDoubleClick (const MouseEvent& e) override
     {
+        if (e.mods.isRightButtonDown() || e.mods.isPopupMenu())
+        {
+            lastRightClickMs = 0;
+            resetToDefaultValue();
+            return;
+        }
         showTextBox();
     }
 
 private:
+    RangedAudioParameter* boundParam = nullptr;
+    uint32 lastRightClickMs = 0;
     double dragStartProp = 0.0;
     Point<float> dragStartPt {};
     bool isDraggingDial = false;
+};
+
+class MasterFader final : public Slider
+{
+public:
+    void bindResetParameter (RangedAudioParameter* param) noexcept
+    {
+        boundParam = param;
+    }
+
+    void resetToDefaultValue()
+    {
+        if (boundParam != nullptr)
+        {
+            const float defNorm = boundParam->getDefaultValue();
+            boundParam->beginChangeGesture();
+            boundParam->setValueNotifyingHost (defNorm);
+            boundParam->endChangeGesture();
+        }
+        else
+        {
+            setValue (0.0, sendNotificationSync);
+        }
+    }
+
+    void mouseDown (const MouseEvent& e) override
+    {
+        if (e.mods.isRightButtonDown() || e.mods.isPopupMenu())
+        {
+            const uint32 nowMs = Time::getMillisecondCounter();
+            if (nowMs - lastRightClickMs <= 420)
+            {
+                lastRightClickMs = 0;
+                resetToDefaultValue();
+                return;
+            }
+            lastRightClickMs = nowMs;
+        }
+        Slider::mouseDown (e);
+    }
+
+    void mouseDoubleClick (const MouseEvent& e) override
+    {
+        if (e.mods.isRightButtonDown() || e.mods.isPopupMenu())
+        {
+            lastRightClickMs = 0;
+            resetToDefaultValue();
+            return;
+        }
+        Slider::mouseDoubleClick (e);
+    }
+
+private:
+    RangedAudioParameter* boundParam = nullptr;
+    uint32 lastRightClickMs = 0;
 };
 
 // =========================================================================
@@ -578,13 +671,14 @@ public:
         fader.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
         fader.setDoubleClickReturnValue (true, 0.0);
         fader.setPopupDisplayEnabled (true, true, &canvas);
+        fader.bindResetParameter (state.getParameter ("fader"));
         canvas.addAndMakeVisible (fader);
         faderAtt = std::make_unique<State::SliderAttachment> (state, "fader", fader);
 
         // FL HEAT / OUTPUT EVEN & ODD selector button (all uniform size!)
         setupParamBtn  (bHeatByp, "FL HEAT",  "AmberBtn", "heatBypass");
         setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
-        setupParamBtn  (bPad,     "-20 dB",   "AmberBtn", "pad20");
+        setupParamBtn  (bPad,     "MONO",     "AmberBtn", "pad20");
 
         // Dynamics buttons (100% bound via State::ButtonAttachment for full DAW automation & right-click context menu!)
         setupParamBtn  (bLink,    "EXT SC",   "AmberBtn", "extSidechain");
@@ -703,14 +797,25 @@ private:
 
     void setupKnob (ConsoleDial& d, const String& paramId, const String& colorId)
     {
+        auto* rangedParam = state.getParameter (paramId);
         d.setComponentID (colorId);
+        d.bindResetParameter (rangedParam);
         canvas.addAndMakeVisible (d);
         attachments.push_back (std::make_unique<State::SliderAttachment> (state, paramId, d));
 
-        if (auto* p = dynamic_cast<AudioParameterFloat*> (state.getParameter (paramId)))
+        if (rangedParam != nullptr)
+            d.setDoubleClickReturnValue (true, static_cast<double> (rangedParam->convertFrom0to1 (rangedParam->getDefaultValue())));
+
+        if (auto* p = dynamic_cast<AudioParameterFloat*> (rangedParam))
         {
             d.textFromValueFunction = [this, p, paramId] (double v)
             {
+                if (paramId == "compRatio")
+                {
+                    if (v >= 19.95)
+                        return String ("20:0");
+                    return String (v, 1) + ":1";
+                }
                 const auto unit = p->getLabel();
                 const bool isShelfGain = (paramId == "lowGain"  && !bLfBell.getToggleState())
                                       || (paramId == "highGain" && !bHfBell.getToggleState());
@@ -758,8 +863,9 @@ private:
 
     void layoutCanvasControls()
     {
-        constexpr int knobSz = 60;
-        constexpr int eqKnob = 48;
+        // Every single rotary knob in the plugin uses the exact same 52x52 hardware dimensions!
+        constexpr int knobSz = 52;
+        constexpr int eqKnob = 52;
         // Every single button in the plugin uses the exact same hardware dimensions!
         constexpr int btnW   = 52;
         constexpr int btnH   = 22;
@@ -771,27 +877,27 @@ private:
         // - GATE / EXPAND (Separated card: y = 427..712)
         // - FILTERS: HP Hz, LP Hz + 1 BUTTON & 4 LEDs FOR dB/OCT (y = 717..915)
         // =====================================================================
-        kInputGain.setBounds (18, 28, 56, 56);
+        kInputGain.setBounds (20, 30, knobSz, knobSz);
         bPhase.setBounds     (124, 24, btnW, btnH);
         bPad.setBounds       (124, 52, btnW, btnH);
         bHeatByp.setBounds   (124, 80, btnW, btnH);
 
-        kHeatDrive.setBounds (24, 114, 54, 54);
-        kHeatTone.setBounds  (96, 114, 54, 54);
-        kEvenHarm.setBounds  (24, 114, 54, 54);
-        kOddHarm.setBounds   (96, 114, 54, 54);
+        kHeatDrive.setBounds (24, 114, knobSz, knobSz);
+        kHeatTone.setBounds  (96, 114, knobSz, knobSz);
+        kEvenHarm.setBounds  (24, 114, knobSz, knobSz);
+        kOddHarm.setBounds   (96, 114, knobSz, knobSz);
 
         // COMPRESSOR Card (y = 198..422)
-        kCompRat.setBounds (18, 224, knobSz, knobSz);
+        kCompRat.setBounds (22, 228, knobSz, knobSz);
         bLink.setBounds    (118, 234, btnW, btnH);
-        kCompThr.setBounds (110, 276, knobSz, knobSz);
-        kCompRel.setBounds (18, 324, knobSz, knobSz);
+        kCompThr.setBounds (114, 280, knobSz, knobSz);
+        kCompRel.setBounds (22, 328, knobSz, knobSz);
 
         // GATE / EXPAND Card (y = 427..712)
-        kExpThr.setBounds  (110, 448, 56, 56);
-        kExpRng.setBounds  (18,  458, 56, 56);
+        kExpThr.setBounds  (112, 450, knobSz, knobSz);
+        kExpRng.setBounds  (20,  460, knobSz, knobSz);
         bExpSel.setBounds  (116, 520, btnW, btnH);
-        kExpRel.setBounds  (18,  556, 56, 56);
+        kExpRel.setBounds  (20,  558, knobSz, knobSz);
 
         // Dynamics section enable buttons (3 identical buttons)
         bDynIn.setBounds (12,  658, btnW, btnH);
@@ -799,10 +905,10 @@ private:
         bCmpIn.setBounds (128, 658, btnW, btnH);
 
         // Filters: HP Hz & LP kHz (top row) + 2 Stepped Slope Knobs (0 dB .. Brickwall, bottom row)
-        kHpf.setBounds     (24,  740, 52, 52);
-        kLpf.setBounds     (112, 740, 52, 52);
-        kHpSlope.setBounds (24,  822, 52, 52);
-        kLpSlope.setBounds (112, 822, 52, 52);
+        kHpf.setBounds     (24,  740, knobSz, knobSz);
+        kLpf.setBounds     (112, 740, knobSz, knobSz);
+        kHpSlope.setBounds (24,  822, knobSz, knobSz);
+        kLpSlope.setBounds (112, 822, knobSz, knobSz);
 
         // =====================================================================
         // COLUMN 2 (x = 192..384):
@@ -813,23 +919,23 @@ private:
         // - MID / SIDE dB Card (y = 745..915)
         // =====================================================================
         // EQ HF Card
-        kHfGain.setBounds  (212, 30, eqKnob, eqKnob);
-        kHfFreq.setBounds  (316, 30, eqKnob, eqKnob);
+        kHfGain.setBounds  (210, 28, eqKnob, eqKnob);
+        kHfFreq.setBounds  (314, 28, eqKnob, eqKnob);
         bHfBell.setBounds  (262, 92, btnW, btnH);
 
         // EQ MID Card (HMF row + LMF row + BLK/BRN button)
-        kMidGain.setBounds (200, 152, eqKnob, eqKnob);
-        kMidQ.setBounds    (264, 152, eqKnob, eqKnob);
-        kMidFreq.setBounds (328, 152, eqKnob, eqKnob);
+        kMidGain.setBounds (198, 150, eqKnob, eqKnob);
+        kMidQ.setBounds    (262, 150, eqKnob, eqKnob);
+        kMidFreq.setBounds (326, 150, eqKnob, eqKnob);
         bEqSel.setBounds   (262, 224, btnW, btnH);
 
-        kLmfGain.setBounds (200, 272, eqKnob, eqKnob);
-        kLmfQ.setBounds    (264, 272, eqKnob, eqKnob);
-        kLmfFreq.setBounds (328, 272, eqKnob, eqKnob);
+        kLmfGain.setBounds (198, 270, eqKnob, eqKnob);
+        kLmfQ.setBounds    (262, 270, eqKnob, eqKnob);
+        kLmfFreq.setBounds (326, 270, eqKnob, eqKnob);
 
         // EQ LF Card (LF row + LF BELL + EQ routing buttons)
-        kLfGain.setBounds  (212, 408, eqKnob, eqKnob);
-        kLfFreq.setBounds  (316, 408, eqKnob, eqKnob);
+        kLfGain.setBounds  (210, 406, eqKnob, eqKnob);
+        kLfFreq.setBounds  (314, 406, eqKnob, eqKnob);
         bLfBell.setBounds  (262, 470, btnW, btnH);
 
         bEqIn.setBounds    (204, 514, btnW, btnH);
@@ -837,15 +943,15 @@ private:
         bEqPre.setBounds   (320, 514, btnW, btnH);
 
         // DE-ESS Section (y = 566..740): 2 Knobs (FREQ & THRESH) + 3 uniform 52x22 buttons (TYPE, MODE, PRE/POST)
-        kDsFreq.setBounds    (214, 592, 52, 52);
-        kDsThr.setBounds     (302, 592, 52, 52);
+        kDsFreq.setBounds    (214, 592, knobSz, knobSz);
+        kDsThr.setBounds     (302, 592, knobSz, knobSz);
         bDsType.setBounds    (204, 688, btnW, btnH);
         bDsMode.setBounds    (262, 688, btnW, btnH);
         bDsPrePost.setBounds (320, 688, btnW, btnH);
 
         // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915) + ANALOG (-128 dB) button!
-        kMidDb.setBounds   (214, 772, 54, 54);
-        kSideDb.setBounds  (302, 772, 54, 54);
+        kMidDb.setBounds   (214, 772, knobSz, knobSz);
+        kSideDb.setBounds  (302, 772, knobSz, knobSz);
         bAnalog.setBounds  (262, 868, btnW, btnH);
 
         // =====================================================================
@@ -854,8 +960,8 @@ private:
         // - MASTER OUT FADER + DUAL L/R GENERAL LED METER
         // - CHANNELSTRIP + PAPIELGUAPO SIGNATURE (BELOW THE SLIDER!)
         // =====================================================================
-        kInfEff.setBounds      (400, 30, 52, 52);
-        kInfCrv.setBounds      (472, 30, 52, 52);
+        kInfEff.setBounds      (400, 30, knobSz, knobSz);
+        kInfCrv.setBounds      (472, 30, knobSz, knobSz);
         bClip0.setBounds       (436, 120, btnW, btnH);
 
         // General Dual L/R Meter Controls (identical size!) + Long Master Out Fader
@@ -935,7 +1041,7 @@ private:
     {
         if (screenshotSaved)
             return;
-        auto outDir = File ("C:\\Users\\anton\\Desktop\\EstripPapielguapo\\docs");
+        auto outDir = File::getCurrentWorkingDirectory().getChildFile ("docs");
         if (!outDir.exists())
             outDir.createDirectory();
         auto snap = canvas.createComponentSnapshot (canvas.getLocalBounds(), true, 2.0f);
@@ -1005,7 +1111,11 @@ private:
                                 ? ((oddVal > evenVal + 0.5f) ? kFLAccentCyan : kFLAccentOrange)
                                 : ((hDrive < -0.05f) ? kFLAccentCyan : kFLAccentOrange);
         const bool   colorLit   = evenOddMode ? (evenVal > 0.5f || oddVal > 0.5f) : (std::abs (hDrive) > 0.05f);
-        drawIndicatorLed (g, 84.0f, 34.0f, 7.5f, kFLAccentCyan, std::abs (state.getRawParameterValue ("preamp")->load()) > 0.05f);
+        g.setColour (silkCol);
+        g.setFont (getFLFont (8.2f, true));
+        g.drawText ("OVER", 76, 28, 30, 12, Justification::centredRight);
+        drawIndicatorLed (g, 113.0f, 34.0f, 7.5f, kLedRed,
+                          telemetry.inputOverload.load (std::memory_order_relaxed));
         drawIndicatorLed (g, 110.0f, 91.0f, 7.5f, heatLedCol, colorLit);
 
         drawDialRingAndLabels (g, kInputGain, {}, "INPUT +48 dB");
@@ -1020,16 +1130,14 @@ private:
             drawDialRingAndLabels (g, kHeatTone,  {}, "HEAT TONE");
         }
 
-        g.setColour (silkCol);
-        g.setFont (getFLFont (8.8f, true));
-        g.drawText ("OVER", 132, 174, 38, 12, Justification::centredRight);
-        drawIndicatorLed (g, 178.0f, 180.0f, 7.2f, kLedRed,
-                          telemetry.inputOverload.load (std::memory_order_relaxed));
-
         // COMPRESSOR Card
         drawIndicatorLed (g, 142.0f, 222.0f, 7.5f, kLedAmber, bLink.getToggleState());
 
-        drawDialRingAndLabels (g, kCompRat, {}, "RATIO");
+        const float curRat = state.getRawParameterValue ("compRatio")->load();
+        const String ratLabel = (curRat >= 19.95f)
+                              ? "RATE 20:0"
+                              : ("RATE " + String (curRat, curRat >= 9.95f ? 0 : 1) + ":1");
+        drawDialRingAndLabels (g, kCompRat, {}, ratLabel);
         drawDialRingAndLabels (g, kCompThr, {}, "THRESHOLD");
         drawDialRingAndLabels (g, kCompRel, {}, "RELEASE");
 
@@ -1277,7 +1385,7 @@ private:
     ConsoleDial kDsFreq, kDsThr;
     ConsoleDial kInfEff, kInfCrv;
     ConsoleDial kMidDb, kSideDb;
-    Slider fader;
+    MasterFader fader;
 
     TextButton bHeatByp, bPhase, bPad;
     TextButton bLink, bExpSel, bDynIn, bExpIn, bCmpIn;
@@ -1309,48 +1417,13 @@ void renderSurcoEditorSnapshot (const File& outPng)
     extern AudioProcessor* JUCE_CALLTYPE createPluginFilter();
     std::unique_ptr<AudioProcessor> proc (createPluginFilter());
     proc->prepareToPlay (48000.0, 256);
-    for (auto* p : proc->getParameters())
-    {
-        const auto nm = p->getName (128);
-        if (nm == "Input trim")      p->setValueNotifyingHost (0.45f);
-        if (nm == "Heat Drive")      p->setValueNotifyingHost (0.72f);
-        if (nm == "Heat Tone")       p->setValueNotifyingHost (0.62f);
-        if (nm == "Compressor ratio")     p->setValueNotifyingHost (0.52f);
-        if (nm == "Compressor threshold") p->setValueNotifyingHost (0.65f);
-        if (nm == "Compressor release")   p->setValueNotifyingHost (0.48f);
-        if (nm == "Gate range")           p->setValueNotifyingHost (0.50f);
-        if (nm == "Gate threshold")       p->setValueNotifyingHost (0.55f);
-        if (nm == "Gate release")         p->setValueNotifyingHost (0.45f);
-        if (nm == "High pass")            p->setValueNotifyingHost (0.42f);
-        if (nm == "Low pass")             p->setValueNotifyingHost (0.68f);
-        if (nm == "HP Slope")             p->setValueNotifyingHost (4.0f / 7.0f);
-        if (nm == "LP Slope")             p->setValueNotifyingHost (7.0f / 7.0f);
-        if (nm == "Inflate Effect")  p->setValueNotifyingHost (0.58f);
-        if (nm == "Inflate Curve")   p->setValueNotifyingHost (0.65f);
-        if (nm == "High shelf gain") p->setValueNotifyingHost (0.68f);
-        if (nm == "High mid gain")   p->setValueNotifyingHost (0.61f);
-        if (nm == "Low mid gain")    p->setValueNotifyingHost (0.64f);
-        if (nm == "Low shelf gain")  p->setValueNotifyingHost (0.58f);
-        if (nm == "De-Ess")          p->setValueNotifyingHost (1.0f);
-        if (nm == "DeEsser Thresh")  p->setValueNotifyingHost (0.60f);
-        if (nm == "Analog Noise")    p->setValueNotifyingHost (1.0f);
-        if (nm == "Clip 0 dB")       p->setValueNotifyingHost (1.0f);
-        if (nm == "Mid Gain")        p->setValueNotifyingHost (0.62f);
-        if (nm == "Side Gain")       p->setValueNotifyingHost (0.64f);
-        if (nm == "Meter Scale (-18 VU)") p->setValueNotifyingHost (1.0f);
-    }
     AudioBuffer<float> buf (2, 256);
     MidiBuffer midi;
-    for (int i = 0; i < 256; ++i)
-    {
-        buf.setSample (0, i, 0.45f * std::sin (i * 0.25f));
-        buf.setSample (1, i, 0.38f * std::cos (i * 0.25f));
-    }
+    buf.clear();
     proc->processBlock (buf, midi);
     std::unique_ptr<AudioProcessorEditor> ed (proc->createEditorIfNeeded());
     if (auto* se = dynamic_cast<SurcoEditor*> (ed.get()))
     {
-        se->setCalibratedRms18ForSnapshot (true);
         se->renderSnapshotToFile (outPng);
     }
 }
