@@ -117,29 +117,27 @@ void drawIndicatorLed (Graphics& g, float cx, float cy, float diameter, Colour c
 void drawChassisScrew (Graphics& g, float cx, float cy, float r = 4.4f, float angleRad = 0.45f) noexcept
 {
     // Recessed socket well
-    g.setColour (Colours::black.withAlpha (0.82f));
+    g.setColour (Colours::black.withAlpha (0.85f));
     g.fillEllipse (cx - r - 1.2f, cy - r - 0.8f, (r + 1.2f) * 2.0f, (r + 1.2f) * 2.0f);
-    g.setColour (Colour (0xff343a40).withAlpha (0.55f));
+    g.setColour (Colour (0xff40464d).withAlpha (0.55f));
     g.drawEllipse (cx - r - 0.8f, cy - r - 0.8f, (r + 0.8f) * 2.0f, (r + 0.8f) * 2.0f, 0.7f);
 
-    // Metallic hex/round screw head
-    ColourGradient headGrad (Colour (0xff4a5158), cx - r * 0.6f, cy - r * 0.6f,
-                             Colour (0xff1b1e22), cx + r * 0.7f, cy + r * 0.7f, false);
+    // Metallic round screw head with realistic radial sheen
+    ColourGradient headGrad (Colour (0xff565d65), cx - r * 0.55f, cy - r * 0.55f,
+                             Colour (0xff191c20), cx + r * 0.75f, cy + r * 0.75f, false);
     g.setGradientFill (headGrad);
     g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
 
-    g.setColour (Colour (0xff0e1013));
-    g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, 0.8f);
+    g.setColour (Colour (0xff0b0d10));
+    g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, 0.85f);
 
-    // Cross-slot / Phillips machined groove
-    const float slotLen = r * 0.62f;
+    // Single diagonal slotted flathead screw groove (exact 1:1 match to reference photo!)
+    const float slotLen = r * 0.70f;
     const float c1 = std::cos (angleRad), s1 = std::sin (angleRad);
-    const float c2 = -s1,                 s2 = c1;
-    g.setColour (Colour (0xff0d0f12).withAlpha (0.90f));
-    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen, cx + c1 * slotLen, cy + s1 * slotLen, 1.3f);
-    g.drawLine (cx - c2 * slotLen, cy - s2 * slotLen, cx + c2 * slotLen, cy + s2 * slotLen, 1.3f);
-    g.setColour (Colours::white.withAlpha (0.14f));
-    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen + 0.6f, cx + c1 * slotLen, cy + s1 * slotLen + 0.6f, 0.6f);
+    g.setColour (Colour (0xff080a0c).withAlpha (0.95f));
+    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen, cx + c1 * slotLen, cy + s1 * slotLen, 1.45f);
+    g.setColour (Colours::white.withAlpha (0.22f));
+    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen + 0.7f, cx + c1 * slotLen, cy + s1 * slotLen + 0.7f, 0.65f);
 }
 
 void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noexcept
@@ -191,31 +189,41 @@ void drawFLHeatBackdropVector (Graphics& g, int w, int h)
         g.setColour (Colours::black.withAlpha (0.82f));
         g.fillRoundedRectangle (r.expanded (0.9f).translated (0.0f, 2.2f), 6.0f);
 
-        // Brushed dark aluminum module surface gradient (exact hardware reference look)
-        ColourGradient cardGrad (Colour (0xff272b31), r.getX(), r.getY(),
-                                 Colour (0xff171a1e), r.getX(), r.getBottom(), false);
-        cardGrad.addColour (0.38, Colour (0xff21252b));
-        cardGrad.addColour (0.78, Colour (0xff1b1e23));
+        // Brushed dark aluminum module surface gradient (exact 1:1 vertical brushed metal look)
+        ColourGradient cardGrad (Colour (0xff2b2d32), r.getX(), r.getY(),
+                                 Colour (0xff1c1e22), r.getX(), r.getBottom(), false);
+        cardGrad.addColour (0.28, Colour (0xff2e3035));
+        cardGrad.addColour (0.55, Colour (0xff26282d));
+        cardGrad.addColour (0.85, Colour (0xff1f2125));
         g.setGradientFill (cardGrad);
         g.fillRoundedRectangle (r, 5.5f);
 
         // Subtle overhead studio spotlight sheen on each hardware module
-        ColourGradient sheen (Colours::white.withAlpha (0.045f), r.getCentreX(), r.getY() + 18.0f,
+        ColourGradient sheen (Colours::white.withAlpha (0.055f), r.getCentreX(), r.getY() + 24.0f,
                               Colours::transparentBlack, r.getCentreX(), r.getBottom(), true);
         g.setGradientFill (sheen);
         g.fillRoundedRectangle (r, 5.5f);
 
-        // Micro-brushed horizontal anodized grain lines + subtle metal patina
+        // Fine vertical brushed anodized aluminum hairlines (exact 1:1 match to reference photo!)
         uint32 rng = 0x9E3779B9u ^ static_cast<uint32> (cardIdx * 7919);
         auto nextRand = [&]() noexcept -> float
         {
             rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
             return static_cast<float> (rng & 0xFFFFu) / 65535.0f;
         };
-        for (int ly = roundToInt (r.getY() + 20.0f); ly < roundToInt (r.getBottom() - 3.0f); ly += 2)
+        const int yTopGrain = roundToInt (r.getY() + (title.isNotEmpty() ? 21.0f : 3.0f));
+        const int yBotGrain = roundToInt (r.getBottom() - 3.0f);
+        for (int lx = roundToInt (r.getX() + 3.0f); lx < roundToInt (r.getRight() - 3.0f); ++lx)
         {
-            const float alpha = 0.014f + 0.024f * nextRand();
-            g.setColour ((ly & 2) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha * 1.45f));
+            const float alpha = 0.012f + 0.028f * nextRand();
+            g.setColour ((lx & 1) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha * 1.55f));
+            g.drawVerticalLine (lx, static_cast<float> (yTopGrain), static_cast<float> (yBotGrain));
+        }
+        // Subtle horizontal cross-sheen bands for realistic machined metal depth
+        for (int ly = yTopGrain; ly < yBotGrain; ly += 3)
+        {
+            const float alpha = 0.006f + 0.010f * nextRand();
+            g.setColour ((ly & 1) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha));
             g.drawHorizontalLine (ly, r.getX() + 3.0f, r.getRight() - 3.0f);
         }
 
@@ -438,24 +446,46 @@ public:
         g.setGradientFill (rimGrad);
         g.fillEllipse (cx - knobRad, cy - knobRad, knobRad * 2.0f, knobRad * 2.0f);
 
-        // Recessed brushed aluminum top cap
+        // Recessed brushed aluminum top cap with 4-lobe conical metallic sheen (exact 1:1 match to reference photo!)
         const float capRad = knobRad * 0.84f;
-        ColourGradient capGrad (Colour (0xff343a41), cx - capRad * 0.4f, cy - capRad,
-                                Colour (0xff181b1f), cx + capRad * 0.4f, cy + capRad, false);
+        ColourGradient capGrad (Colour (0xff3c4249), cx - capRad * 0.65f, cy - capRad * 0.65f,
+                                Colour (0xff181b1f), cx + capRad * 0.65f, cy + capRad * 0.65f, false);
+        capGrad.addColour (0.32, Colour (0xff2b3036));
+        capGrad.addColour (0.50, Colour (0xff383e45));
+        capGrad.addColour (0.72, Colour (0xff1d2025));
         g.setGradientFill (capGrad);
         g.fillEllipse (cx - capRad, cy - capRad, capRad * 2.0f, capRad * 2.0f);
 
+        // Anisotropic conical reflection lobes across the turned-aluminum cap
+        {
+            Path sheenLobe1, sheenLobe2;
+            sheenLobe1.addPieSegment (cx - capRad, cy - capRad, capRad * 2.0f, capRad * 2.0f,
+                                      -0.85f, -0.25f, 0.12f);
+            sheenLobe2.addPieSegment (cx - capRad, cy - capRad, capRad * 2.0f, capRad * 2.0f,
+                                      MathConstants<float>::pi - 0.85f, MathConstants<float>::pi - 0.25f, 0.12f);
+            g.setColour (Colours::white.withAlpha (0.09f));
+            g.fillPath (sheenLobe1);
+            g.fillPath (sheenLobe2);
+        }
+
+        // Concentric micro-turned lathe rings on the aluminum cap
+        for (float rr = capRad * 0.32f; rr < capRad * 0.92f; rr += 2.2f)
+        {
+            g.setColour (Colours::white.withAlpha (0.035f));
+            g.drawEllipse (cx - rr, cy - rr, rr * 2.0f, rr * 2.0f, 0.55f);
+        }
+
         // Subtle top-left specular arc highlight on cap
-        g.setColour (Colours::white.withAlpha (0.18f));
-        g.drawEllipse (cx - capRad + 0.5f, cy - capRad + 0.5f, (capRad - 0.5f) * 2.0f, (capRad - 0.5f) * 2.0f, 0.8f);
+        g.setColour (Colours::white.withAlpha (0.22f));
+        g.drawEllipse (cx - capRad + 0.5f, cy - capRad + 0.5f, (capRad - 0.5f) * 2.0f, (capRad - 0.5f) * 2.0f, 0.85f);
 
         // High-contrast engraved white pointer line with shadow
         const float pAng = angle - MathConstants<float>::halfPi;
-        const float px1 = cx + std::cos (pAng) * (capRad * 0.24f);
-        const float py1 = cy + std::sin (pAng) * (capRad * 0.24f);
+        const float px1 = cx + std::cos (pAng) * (capRad * 0.22f);
+        const float py1 = cy + std::sin (pAng) * (capRad * 0.22f);
         const float px2 = cx + std::cos (pAng) * (knobRad * 0.95f);
         const float py2 = cy + std::sin (pAng) * (knobRad * 0.95f);
-        g.setColour (Colours::black.withAlpha (0.75f));
+        g.setColour (Colours::black.withAlpha (0.78f));
         g.drawLine (px1 + 0.7f, py1 + 0.9f, px2 + 0.7f, py2 + 0.9f, 2.5f);
         g.setColour (Colour (0xfff8fafc));
         g.drawLine (px1, py1, px2, py2, 2.1f);
@@ -524,11 +554,11 @@ public:
         g.setColour (Colours::white.withAlpha (0.45f));
         g.drawRoundedRectangle (cap.reduced (1.0f), 3.2f, 0.8f);
 
-        // Crisp center index line (dark groove + bright white/silver center line)
+        // Crisp center index line (dark groove + glowing orange/amber center line matching reference photo!)
         g.setColour (Colour (0xff0b0d10));
-        g.fillRect (cap.getX() + 2.0f, cap.getCentreY() - 2.0f, cap.getWidth() - 4.0f, 4.0f);
-        g.setColour (Colour (0xfff4f7fa));
-        g.fillRect (cap.getX() + 2.5f, cap.getCentreY() - 0.9f, cap.getWidth() - 5.0f, 1.8f);
+        g.fillRect (cap.getX() + 2.0f, cap.getCentreY() - 2.2f, cap.getWidth() - 4.0f, 4.4f);
+        g.setColour (kFLAccentOrange);
+        g.fillRect (cap.getX() + 2.5f, cap.getCentreY() - 1.1f, cap.getWidth() - 5.0f, 2.2f);
     }
 
     void drawButtonBackground (Graphics& g, Button& button,
@@ -540,52 +570,71 @@ public:
         const String cid = button.getComponentID();
 
         // Recessed dark mounting bezel around every hardware push-button
-        g.setColour (Colour (0xff0a0c0e));
-        g.fillRoundedRectangle (b.expanded (1.4f), 4.2f);
-        g.setColour (Colours::black.withAlpha (0.65f));
-        g.fillRoundedRectangle (b.translated (0.0f, 1.8f), 3.6f);
+        g.setColour (Colour (0xff090b0d));
+        g.fillRoundedRectangle (b.expanded (1.6f), 4.4f);
+        g.setColour (Colours::black.withAlpha (0.72f));
+        g.fillRoundedRectangle (b.translated (0.0f, 2.0f), 3.6f);
 
         const Colour glow = (cid == "RedBtn")   ? kFLAccentRed
                           : (cid == "GreenBtn" || cid == "CyanBtn") ? kFLAccentCyan
                                                 : kFLAccentOrange;
         if (on || down)
         {
-            // Backlit illuminated hardware switch with soft outer bloom
+            // Translucent backlit polycarbonate hardware switch (1:1 match to reference image!)
             g.setColour (glow.withAlpha (0.28f));
             g.fillRoundedRectangle (b.expanded (2.0f), 4.5f);
-            ColourGradient fg (glow.brighter (0.25f), b.getX(), b.getY(),
-                               glow.darker (0.28f),   b.getX(), b.getBottom(), false);
+
+            // Rich deep translucent body with inner hot-spot glow
+            ColourGradient fg (glow.darker (0.35f), b.getX(), b.getY(),
+                               glow.darker (0.85f), b.getX(), b.getBottom(), false);
+            fg.addColour (0.5, glow.darker (0.50f));
             g.setGradientFill (fg);
             g.fillRoundedRectangle (b, 3.2f);
 
-            // Top specular glass highlight
-            g.setColour (Colours::white.withAlpha (0.48f));
+            ColourGradient centerGlow (glow.withAlpha (0.55f), b.getCentreX(), b.getCentreY(),
+                                       Colours::transparentBlack, b.getX(), b.getY(), true);
+            g.setGradientFill (centerGlow);
+            g.fillRoundedRectangle (b, 3.2f);
+
+            // Bright neon edge rim & top specular highlight
+            g.setColour (glow.brighter (0.25f).withAlpha (0.90f));
+            g.drawRoundedRectangle (b.reduced (0.4f), 3.0f, 1.1f);
+            g.setColour (Colours::white.withAlpha (0.42f));
             g.drawHorizontalLine (roundToInt (b.getY() + 1.0f), b.getX() + 3.0f, b.getRight() - 3.0f);
-            g.setColour (Colours::white.withAlpha (0.32f));
-            g.drawRoundedRectangle (b.reduced (0.6f), 2.8f, 0.9f);
         }
         else
         {
             // Tactile matte dark-grey hardware switch with 3D top bevel
-            const Colour topCol = over ? Colour (0xff434950) : Colour (0xff373c42);
-            const Colour botCol = over ? Colour (0xff262a2f) : Colour (0xff1f2327);
+            const Colour topCol = over ? Colour (0xff454b52) : Colour (0xff383d43);
+            const Colour botCol = over ? Colour (0xff262a2f) : Colour (0xff1e2226);
             ColourGradient offGrad (topCol, b.getX(), b.getY(), botCol, b.getX(), b.getBottom(), false);
             g.setGradientFill (offGrad);
             g.fillRoundedRectangle (b, 3.2f);
 
-            g.setColour (Colours::white.withAlpha (0.16f));
+            g.setColour (Colours::white.withAlpha (0.20f));
             g.drawHorizontalLine (roundToInt (b.getY() + 1.0f), b.getX() + 3.0f, b.getRight() - 3.0f);
-            g.setColour (Colour (0xff101215));
+            g.setColour (Colour (0xff3a4047).withAlpha (0.55f));
+            g.drawRoundedRectangle (b.reduced (0.5f), 2.8f, 0.8f);
+            g.setColour (Colour (0xff0e1013));
             g.drawRoundedRectangle (b, 3.2f, 1.0f);
         }
     }
 
     void drawButtonText (Graphics& g, TextButton& button, bool /*over*/, bool /*down*/) override
     {
-        const auto b = button.getLocalBounds().toFloat();
         const bool on = button.getToggleState();
-
-        g.setColour (on ? Colour (0xff121417) : kFLTextBright);
+        // Reference photo uses crisp white/illuminated text on both active backlit and inactive buttons!
+        if (on)
+        {
+            g.setColour (Colours::black.withAlpha (0.65f));
+            g.setFont (getFLFont (10.0f, true));
+            g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (2, 1).translated (0, 1), Justification::centred, 1);
+            g.setColour (Colour (0xfff8fafc));
+        }
+        else
+        {
+            g.setColour (kFLTextBright);
+        }
         g.setFont (getFLFont (10.0f, true));
         g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (2, 1), Justification::centred, 1);
     }
