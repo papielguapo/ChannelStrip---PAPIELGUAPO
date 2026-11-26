@@ -264,12 +264,11 @@ public:
         const double minVal = slider.getMinimum();
         const double maxVal = slider.getMaximum();
         const bool isBipolar = (minVal < -0.001 && maxVal > 0.001 && std::abs (minVal + maxVal) < 1.0);
-        // Only Blue (kFLAccentCyan) and Yellow/Amber (kFLAccentOrange) for all knobs!
-        // Heat5050 uses 50% Blue on the left half and 50% Yellow on the right half!
-        const bool isHeat5050 = (cid == "Heat5050");
+        // Factory FL HEAT bipolar behavior: lights up from 12 o'clock as you move it (Cyan < 0, Yellow/Orange > 0)
+        // Unipolar knobs use Yellow/Orange ("SSLYellow") or Blue/Cyan ("SSLBlue")!
         const bool isBlueKnob = (cid == "SSLBlue" || cid == "SSLGreen");
-        const Colour accent = isHeat5050
-            ? ((sliderPosProportional < 0.5f) ? kFLAccentCyan : kFLAccentOrange)
+        const Colour accent = isBipolar
+            ? ((slider.getValue() < -0.0001) ? kFLAccentCyan : kFLAccentOrange)
             : (isBlueKnob ? kFLAccentCyan : kFLAccentOrange);
 
         const int numTicks = 21;
@@ -291,39 +290,18 @@ public:
         g.setColour (kFLBevelDark);
         g.strokePath (bgArc, PathStrokeType (trackW + 1.4f, PathStrokeType::curved, PathStrokeType::rounded));
 
-        if (isHeat5050)
+        const float startValAngle = isBipolar
+            ? (rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle))
+            : rotaryStartAngle;
+        if (std::abs (angle - startValAngle) > 0.015f)
         {
-            // 50% Blue (left half) + 50% Yellow (right half) dual-color ring for FL HEAT knobs!
-            const float midAngle = rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle);
-            Path leftHalf, rightHalf;
-            leftHalf.addCentredArc (cx, cy, arcRad, arcRad, 0.0f, rotaryStartAngle, midAngle, true);
-            rightHalf.addCentredArc (cx, cy, arcRad, arcRad, 0.0f, midAngle, rotaryEndAngle, true);
-
-            g.setColour (kFLAccentCyan.withAlpha (0.22f));
-            g.strokePath (leftHalf, PathStrokeType (trackW + 3.6f, PathStrokeType::curved, PathStrokeType::rounded));
-            g.setColour (kFLAccentCyan.withAlpha (sliderPosProportional < 0.5f ? 1.0f : 0.65f));
-            g.strokePath (leftHalf, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
-
-            g.setColour (kFLAccentOrange.withAlpha (0.22f));
-            g.strokePath (rightHalf, PathStrokeType (trackW + 3.6f, PathStrokeType::curved, PathStrokeType::rounded));
-            g.setColour (kFLAccentOrange.withAlpha (sliderPosProportional >= 0.5f ? 1.0f : 0.65f));
-            g.strokePath (rightHalf, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
-        }
-        else
-        {
-            const float startValAngle = isBipolar
-                ? (rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle))
-                : rotaryStartAngle;
-            if (std::abs (angle - startValAngle) > 0.015f)
-            {
-                Path valArc;
-                valArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f,
-                                      std::min (startValAngle, angle), std::max (startValAngle, angle), true);
-                g.setColour (accent.withAlpha (0.25f));
-                g.strokePath (valArc, PathStrokeType (trackW + 4.2f, PathStrokeType::curved, PathStrokeType::rounded));
-                g.setColour (accent);
-                g.strokePath (valArc, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
-            }
+            Path valArc;
+            valArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f,
+                                  std::min (startValAngle, angle), std::max (startValAngle, angle), true);
+            g.setColour (accent.withAlpha (0.25f));
+            g.strokePath (valArc, PathStrokeType (trackW + 4.2f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (accent);
+            g.strokePath (valArc, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
         }
 
         g.setColour (Colours::black.withAlpha (0.52f));
@@ -433,8 +411,10 @@ public:
 };
 
 // =========================================================================
-// Functional Rotary Knob: Click & Drag anywhere on the knob to move it smoothly!
-// Double-click or Right-click to type a numeric value directly.
+// Functional Rotary Knob:
+// - Click & Drag anywhere on the knob (vertical or horizontal) to move it smoothly!
+// - Scroll Mouse Wheel over the knob to step/adjust the value!
+// - Double-click or Right-click to type a numeric value directly.
 // =========================================================================
 class ConsoleDial final : public Slider
 {
@@ -445,7 +425,7 @@ public:
         setTextBoxStyle (Slider::TextBoxBelow, false, 52, 20);
         setDoubleClickReturnValue (false, 0.0);
         setSliderSnapsToMousePosition (false);
-        setMouseDragSensitivity (130);
+        setScrollWheelEnabled (true);
         setWantsKeyboardFocus (true);
         setPopupDisplayEnabled (true, true, nullptr);
     }
@@ -462,13 +442,51 @@ public:
             showTextBox();
             return;
         }
+        dragStartProp = valueToProportionOfLength (getValue());
+        isDraggingDial = true;
         Slider::mouseDown (e);
+    }
+
+    void mouseDrag (const MouseEvent& e) override
+    {
+        if (!isDraggingDial || e.mods.isRightButtonDown())
+            return;
+        const float sensitivity = e.mods.isShiftDown() ? 450.0f : 130.0f;
+        const float delta = static_cast<float> (-e.getDistanceFromDragStartY() + e.getDistanceFromDragStartX() * 0.5f) / sensitivity;
+        const double newProp = std::clamp (dragStartProp + static_cast<double> (delta), 0.0, 1.0);
+        setValue (proportionOfLengthToValue (newProp), sendNotificationSync);
+    }
+
+    void mouseUp (const MouseEvent& e) override
+    {
+        isDraggingDial = false;
+        Slider::mouseUp (e);
+    }
+
+    void mouseWheelMove (const MouseEvent& /*e*/, const MouseWheelDetails& wheel) override
+    {
+        if (!isEnabled())
+            return;
+        const double delta = (std::abs (wheel.deltaY) > std::abs (wheel.deltaX)) ? wheel.deltaY : wheel.deltaX;
+        if (std::abs (delta) < 1.0e-5)
+            return;
+        const double stepProp = (getInterval() >= 1.0)
+            ? (1.0 / std::max (1.0, (getMaximum() - getMinimum()) / getInterval()))
+            : 0.025;
+        const double dir = (wheel.isReversed ? -1.0 : 1.0) * (delta > 0.0 ? 1.0 : -1.0);
+        const double curProp = valueToProportionOfLength (getValue());
+        const double nextProp = std::clamp (curProp + dir * stepProp, 0.0, 1.0);
+        setValue (proportionOfLengthToValue (nextProp), sendNotificationSync);
     }
 
     void mouseDoubleClick (const MouseEvent&) override
     {
         showTextBox();
     }
+
+private:
+    double dragStartProp = 0.0;
+    bool isDraggingDial = false;
 };
 
 // =========================================================================
@@ -490,12 +508,12 @@ public:
         setLookAndFeel (&lnf);
 
         addAndMakeVisible (canvas);
-        canvas.setInterceptsMouseClicks (true, true);
+        canvas.setInterceptsMouseClicks (false, true);
 
-        // 1. HIGH-GAIN INPUT (Yellow) + FL HEAT (50% Blue / 50% Yellow on both!)
+        // 1. HIGH-GAIN INPUT (Yellow) + FL HEAT (Factory bipolar: lights up from center like Mid & Side!)
         setupKnob (kInputGain, "preamp",        "SSLYellow");
-        setupKnob (kHeatDrive, "heatDrive",     "Heat5050");
-        setupKnob (kHeatTone,  "heatTone",      "Heat5050");
+        setupKnob (kHeatDrive, "heatDrive",     "SSLYellow");
+        setupKnob (kHeatTone,  "heatTone",      "SSLBlue");
 
         // 2. DYNAMICS (COMP): alternating Yellow & Blue
         setupKnob (kCompRat,   "compRatio",     "SSLYellow");
@@ -621,6 +639,13 @@ public:
     void paint (Graphics& g) override
     {
         g.fillAll (Colour (0xff121417));
+    }
+
+    void mouseDoubleClick (const MouseEvent&) override
+    {
+        toggleChoice ("oversampling");
+        syncDynamicStates();
+        canvas.repaint();
     }
 
     void resized() override
