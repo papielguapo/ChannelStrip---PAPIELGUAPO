@@ -140,7 +140,13 @@ silence = np.zeros((2, 48000), dtype=np.float32)
 noise_out = fx_noise.process(silence, 48000)[:, 4000:]
 noise_rms_db = 20 * np.log10(np.sqrt(np.mean(noise_out ** 2)))
 assert -131.5 <= noise_rms_db <= -124.5
-print(f"[PASS] Módulo 7: OUTPUT Inflate (+{20*np.log10(inf100/inf0):.2f} dB), Clip 0 dB (max {np.max(np.abs(clipped)):.4f}), Analog Noise ({noise_rms_db:.2f} dBFS RMS) y Fader verificados")
+# Verificar microvariaciones analógicas L/R sobre señal idéntica cuando ANALOG está activo
+t_an = np.arange(12000, dtype=np.float32) / 48000.0
+dual_mono_in = np.vstack([0.25 * np.sin(2 * np.pi * 440 * t_an)] * 2).astype(np.float32)
+analog_lr = fx_noise.process(dual_mono_in, 48000)[:, 2000:]
+lr_diff_rms = float(np.sqrt(np.mean((analog_lr[0] - analog_lr[1]) ** 2)))
+assert lr_diff_rms > 1e-4
+print(f"[PASS] Módulo 7: OUTPUT Inflate (+{20*np.log10(inf100/inf0):.2f} dB), Clip 0 dB (max {np.max(np.abs(clipped)):.4f}), Analog L/R Micro-Variations (diff RMS {lr_diff_rms:.5f}, floor {noise_rms_db:.2f} dBFS) y Fader verificados")
 
 # 10. Benchmark de Uso de CPU en tiempo real (48 kHz y 96 kHz, bloque de 256 muestras, cadena completa activa)
 import time

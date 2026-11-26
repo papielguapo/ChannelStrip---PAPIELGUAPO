@@ -505,17 +505,19 @@ struct OutputInflator
 
 // =========================================================================
 // Warm Studio Console Pink/Tape Analog Noise Floor calibrated to -128 dBFS RMS
-// Uses Paul Kellet's 3-pole pinking filter + gentle high-frequency silk rolloff
-// with independent decorrelated L/R xorshift64* generators.
+// + Organic L/R Analog Console Micro-Variations (component tolerances, slow thermal
+// drift, subtle decorrelated phase/HF silk dispersion, and gentle asymmetric warmth).
 // =========================================================================
 struct WarmAnalogNoise
 {
     uint64_t seed[2] { 0x6A09E667F3BCC908ULL, 0xBB67AE8584CAA73BULL };
     double b0[2]{}, b1[2]{}, b2[2]{}, lp[2]{};
+    double drift[2]{}, apState[2]{};
 
     void reset() noexcept
     {
         b0[0] = b0[1] = b1[0] = b1[1] = b2[0] = b2[1] = lp[0] = lp[1] = 0.0;
+        drift[0] = drift[1] = apState[0] = apState[1] = 0.0;
     }
 
     inline double nextWhite (int ch) noexcept
@@ -529,7 +531,7 @@ struct WarmAnalogNoise
         return (static_cast<double> (u) * (1.0 / 9007199254740992.0)) * 2.0 - 1.0;
     }
 
-    inline double tick (int ch) noexcept
+    inline double processSample (int ch, double x) noexcept
     {
         const int c = ch & 1;
         // Triangular PDF dithered white excitation
@@ -541,10 +543,28 @@ struct WarmAnalogNoise
         const double pink = b0[c] + b1[c] + b2[c] + w * 0.1848;
         // Gentle analog tape/transformer top-end silk smoothing
         lp[c] = 0.62 * lp[c] + 0.38 * pink;
+        // Ultra-slow independent L/R thermal drift (~2 Hz random walk)
+        drift[c] = 0.99975 * drift[c] + 0.00025 * pink;
+
+        // Analog component tolerance between L and R channels (+/-0.035 dB static + micro thermal drift)
+        const double tolGain = (c == 0 ? 1.0038 : 0.9962) + drift[c] * 0.0018;
+        const double xMod = x * tolGain;
+
+        // Subtle decorrelated L/R all-pass phase & high-frequency capsule/transformer dispersion
+        const double apCoeff = (c == 0 ? 0.034 : -0.029) + drift[c] * 0.0025;
+        const double apOut = apCoeff * xMod + apState[c];
+        apState[c] = xMod - apCoeff * apOut;
+        double y = 0.86 * xMod + 0.14 * apOut;
+
+        // Subtle asymmetric analog console harmonic micro-character (different per L/R channel)
+        const double evenAmt = (c == 0) ?  0.0022 : -0.0019;
+        const double oddAmt  = (c == 0) ? -0.0014 : -0.0017;
+        y += evenAmt * (y * y) + oddAmt * (y * y * y);
+
         // Normalized to exact -128.00 dBFS RMS (10^(-128/20) = 3.9810717055e-7; raw lp RMS is 1.1355)
         constexpr double kTargetRms128dB = 3.981071705534973e-7;
         constexpr double kPinkRmsNorm    = 1.0 / 1.1355;
-        return lp[c] * (kTargetRms128dB * kPinkRmsNorm);
+        return y + lp[c] * (kTargetRms128dB * kPinkRmsNorm);
     }
 };
 
@@ -910,7 +930,7 @@ public:
             {
                 double y = outCh[ch];
                 if (analogOn)
-                    y += warmNoise.tick(ch);
+                    y = warmNoise.processSample(ch, y);
                 if (targetInfEffect > 0.0001 || inflator.effectCurrent > 0.0001 || clip0dB)
                     y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
                 // Master Fader Out is the VERY LAST stage before the OUT meter!

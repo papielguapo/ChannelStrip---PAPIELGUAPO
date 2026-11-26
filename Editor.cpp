@@ -67,31 +67,79 @@ inline void drawPapielguapoSignature (Graphics& g, Rectangle<float> area, Colour
 void drawIndicatorLed (Graphics& g, float cx, float cy, float diameter, Colour col, bool lit) noexcept
 {
     const float r = diameter * 0.5f;
-    const Rectangle<float> bezel (cx - r - 1.2f, cy - r - 1.2f, diameter + 2.4f, diameter + 2.4f);
+    // Recessed dark metal socket with outer shadow & chrome rim
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.fillEllipse (cx - r - 2.0f, cy - r - 1.2f, diameter + 4.0f, diameter + 4.0f);
 
-    g.setColour (Colour (0xff101317));
+    const Rectangle<float> bezel (cx - r - 1.5f, cy - r - 1.5f, diameter + 3.0f, diameter + 3.0f);
+    ColourGradient rimGrad (Colour (0xff485058), cx, bezel.getY(),
+                            Colour (0xff121518), cx, bezel.getBottom(), false);
+    g.setGradientFill (rimGrad);
     g.fillEllipse (bezel);
-    g.setColour (Colour (0xff343940));
-    g.drawEllipse (bezel, 0.8f);
+
+    g.setColour (Colour (0xff0b0d10));
+    g.fillEllipse (cx - r - 0.5f, cy - r - 0.5f, diameter + 1.0f, diameter + 1.0f);
 
     const Rectangle<float> bulb (cx - r, cy - r, diameter, diameter);
     if (lit)
     {
-        ColourGradient halo (col.withAlpha (0.48f), cx, cy, col.withAlpha (0.0f), cx + r * 2.5f, cy + r * 2.5f, true);
-        g.setGradientFill (halo);
-        g.fillEllipse (cx - r * 2.3f, cy - r * 2.3f, diameter * 2.3f, diameter * 2.3f);
-        g.setColour (col);
+        // Multi-stage realistic bloom halo
+        ColourGradient outerHalo (col.withAlpha (0.38f), cx, cy, col.withAlpha (0.0f), cx + r * 3.1f, cy + r * 3.1f, true);
+        g.setGradientFill (outerHalo);
+        g.fillEllipse (cx - r * 3.0f, cy - r * 3.0f, diameter * 3.0f, diameter * 3.0f);
+
+        ColourGradient innerHalo (col.brighter (0.4f).withAlpha (0.65f), cx, cy, col.withAlpha (0.0f), cx + r * 1.7f, cy + r * 1.7f, true);
+        g.setGradientFill (innerHalo);
+        g.fillEllipse (cx - r * 1.7f, cy - r * 1.7f, diameter * 1.7f, diameter * 1.7f);
+
+        // 3D glass dome bulb gradient
+        ColourGradient bulbGrad (col.brighter (0.55f), cx - r * 0.25f, cy - r * 0.3f,
+                                 col.darker (0.35f),   cx + r * 0.6f,  cy + r * 0.7f, true);
+        g.setGradientFill (bulbGrad);
         g.fillEllipse (bulb);
-        g.setColour (Colours::white.withAlpha (0.85f));
-        g.fillEllipse (cx - r * 0.45f, cy - r * 0.52f, r * 0.78f, r * 0.62f);
+
+        // Hot filament center & crisp specular reflection
+        g.setColour (Colours::white.withAlpha (0.92f));
+        g.fillEllipse (cx - r * 0.42f, cy - r * 0.48f, r * 0.76f, r * 0.58f);
     }
     else
     {
-        g.setColour (col.darker (2.6f).withAlpha (0.65f));
+        // Smoked dark glass lens when unlit
+        ColourGradient offGrad (col.darker (2.2f).withAlpha (0.55f), cx - r * 0.25f, cy - r * 0.3f,
+                                Colour (0xff121519),                  cx + r * 0.7f,  cy + r * 0.7f, true);
+        g.setGradientFill (offGrad);
         g.fillEllipse (bulb);
-        g.setColour (Colours::white.withAlpha (0.15f));
-        g.fillEllipse (cx - r * 0.38f, cy - r * 0.44f, r * 0.52f, r * 0.42f);
+        g.setColour (Colours::white.withAlpha (0.22f));
+        g.fillEllipse (cx - r * 0.40f, cy - r * 0.46f, r * 0.56f, r * 0.42f);
     }
+}
+
+void drawChassisScrew (Graphics& g, float cx, float cy, float r = 4.4f, float angleRad = 0.45f) noexcept
+{
+    // Recessed socket well
+    g.setColour (Colours::black.withAlpha (0.82f));
+    g.fillEllipse (cx - r - 1.2f, cy - r - 0.8f, (r + 1.2f) * 2.0f, (r + 1.2f) * 2.0f);
+    g.setColour (Colour (0xff343a40).withAlpha (0.55f));
+    g.drawEllipse (cx - r - 0.8f, cy - r - 0.8f, (r + 0.8f) * 2.0f, (r + 0.8f) * 2.0f, 0.7f);
+
+    // Metallic hex/round screw head
+    ColourGradient headGrad (Colour (0xff4a5158), cx - r * 0.6f, cy - r * 0.6f,
+                             Colour (0xff1b1e22), cx + r * 0.7f, cy + r * 0.7f, false);
+    g.setGradientFill (headGrad);
+    g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
+
+    g.setColour (Colour (0xff0e1013));
+    g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, 0.8f);
+
+    // Cross-slot / Phillips machined groove
+    const float slotLen = r * 0.62f;
+    const float c1 = std::cos (angleRad), s1 = std::sin (angleRad);
+    const float c2 = -s1,                 s2 = c1;
+    g.setColour (Colour (0xff0d0f12).withAlpha (0.90f));
+    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen, cx + c1 * slotLen, cy + s1 * slotLen, 1.3f);
+    g.drawLine (cx - c2 * slotLen, cy - s2 * slotLen, cx + c2 * slotLen, cy + s2 * slotLen, 1.3f);
+    g.setColour (Colours::white.withAlpha (0.14f));
+    g.drawLine (cx - c1 * slotLen, cy - s1 * slotLen + 0.6f, cx + c1 * slotLen, cy + s1 * slotLen + 0.6f, 0.6f);
 }
 
 void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noexcept
@@ -135,58 +183,107 @@ Image createFLHeatBackdrop (int w, int h)
     const float col3X = col1W + col2W;
     const float col3W = static_cast<float> (w) - col3X;
 
-    g.fillAll (kFLPanelMain);
-    ColourGradient heatGlow (kFLAccentOrange.withAlpha (0.055f), w * 0.45f, 110.0f,
-                             Colours::transparentBlack, w * 0.45f, 650.0f, true);
-    g.setGradientFill (heatGlow);
-    g.fillAll();
+    // Deep anodized metal chassis base
+    g.fillAll (Colour (0xff14171a));
 
-    auto drawFLCard = [&] (Rectangle<float> r, const String& title, Colour dotCol)
+    int cardIdx = 0;
+    auto drawFLCard = [&] (Rectangle<float> r, const String& title, Colour dotCol, bool withScrews = true)
     {
-        g.setColour (kFLPanelRecessed);
-        g.fillRoundedRectangle (r, 5.0f);
-        g.setColour (Colour (0xff141618));
-        g.drawRoundedRectangle (r, 5.0f, 1.0f);
-        g.setColour (Colour (0xff363b40).withAlpha (0.4f));
-        g.drawHorizontalLine (roundToInt (r.getBottom() - 1.0f), r.getX() + 4.0f, r.getRight() - 4.0f);
+        ++cardIdx;
+        // Outer drop shadow into chassis gap
+        g.setColour (Colours::black.withAlpha (0.75f));
+        g.fillRoundedRectangle (r.expanded (0.8f).translated (0.0f, 1.8f), 6.0f);
+
+        // Brushed dark aluminum module surface gradient
+        ColourGradient cardGrad (Colour (0xff262a30), r.getX(), r.getY(),
+                                 Colour (0xff191c20), r.getX(), r.getBottom(), false);
+        cardGrad.addColour (0.45, Colour (0xff202429));
+        g.setGradientFill (cardGrad);
+        g.fillRoundedRectangle (r, 5.5f);
+
+        // Micro-brushed horizontal anodized grain lines + subtle surface patina
+        uint32 rng = 0x9E3779B9u ^ static_cast<uint32> (cardIdx * 7919);
+        auto nextRand = [&]() noexcept -> float
+        {
+            rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+            return static_cast<float> (rng & 0xFFFFu) / 65535.0f;
+        };
+        for (int ly = roundToInt (r.getY() + 20.0f); ly < roundToInt (r.getBottom() - 3.0f); ly += 2)
+        {
+            const float alpha = 0.012f + 0.022f * nextRand();
+            g.setColour ((ly & 2) ? Colours::white.withAlpha (alpha) : Colours::black.withAlpha (alpha * 1.4f));
+            g.drawHorizontalLine (ly, r.getX() + 3.0f, r.getRight() - 3.0f);
+        }
 
         if (title.isNotEmpty())
         {
-            Rectangle<float> hdr (r.getX() + 1.0f, r.getY() + 1.0f, r.getWidth() - 2.0f, 19.0f);
-            g.setColour (Colour (0xff16181b));
-            g.fillRoundedRectangle (hdr, 4.0f);
+            Rectangle<float> hdr (r.getX() + 1.0f, r.getY() + 1.0f, r.getWidth() - 2.0f, 20.0f);
+            ColourGradient hdrGrad (Colour (0xff1a1d21), hdr.getX(), hdr.getY(),
+                                    Colour (0xff121417), hdr.getX(), hdr.getBottom(), false);
+            g.setGradientFill (hdrGrad);
+            g.fillRoundedRectangle (hdr, 5.0f);
+
+            // Subtle groove line below header
+            g.setColour (Colours::black.withAlpha (0.70f));
+            g.drawHorizontalLine (roundToInt (hdr.getBottom()), r.getX() + 2.0f, r.getRight() - 2.0f);
+            g.setColour (Colours::white.withAlpha (0.05f));
+            g.drawHorizontalLine (roundToInt (hdr.getBottom() + 1.0f), r.getX() + 2.0f, r.getRight() - 2.0f);
+
+            // Glowing status dot in header
+            g.setColour (dotCol.withAlpha (0.28f));
+            g.fillEllipse (hdr.getX() + 5.0f, hdr.getCentreY() - 4.5f, 9.0f, 9.0f);
             g.setColour (dotCol);
-            g.fillEllipse (hdr.getX() + 6.0f, hdr.getCentreY() - 2.8f, 5.6f, 5.6f);
+            g.fillEllipse (hdr.getX() + 6.7f, hdr.getCentreY() - 2.8f, 5.6f, 5.6f);
+
             g.setColour (kFLTextBright);
-            g.setFont (getFLFont (10.5f, true));
-            g.drawText (title, hdr.withTrimmedLeft (15.0f), Justification::centredLeft, false);
+            g.setFont (getFLFont (10.2f, true));
+            g.drawText (title, hdr.withTrimmedLeft (16.0f), Justification::centredLeft, false);
+        }
+
+        // Machined 3D bevel frame: bright top specular edge, dark bottom/outer edge
+        g.setColour (Colour (0xff0b0d0f));
+        g.drawRoundedRectangle (r, 5.5f, 1.2f);
+        g.setColour (Colours::white.withAlpha (0.10f));
+        g.drawRoundedRectangle (r.reduced (1.0f), 4.8f, 0.8f);
+        g.setColour (Colours::white.withAlpha (0.18f));
+        g.drawHorizontalLine (roundToInt (r.getY() + 1.0f), r.getX() + 6.0f, r.getRight() - 6.0f);
+
+        // Realistic corner mounting screws on hardware modules
+        if (withScrews)
+        {
+            const float syTop = r.getY() + 10.5f;
+            const float syBot = r.getBottom() - 9.5f;
+            if (title.isNotEmpty())
+                drawChassisScrew (g, r.getRight() - 10.5f, syTop, 4.0f, 0.35f + cardIdx * 0.4f);
+            drawChassisScrew (g, r.getX() + 10.0f,     syBot, 4.1f, 1.10f + cardIdx * 0.5f);
+            drawChassisScrew (g, r.getRight() - 10.0f, syBot, 4.1f, 2.05f + cardIdx * 0.3f);
         }
     };
 
     // =========================================================================
     // COLUMN 1: Separated COMPRESSOR and GATE / EXPAND cards!
     // =========================================================================
-    drawFLCard ({ 5.0f,   5.0f, col1W - 10.0f, 188.0f }, "INPUT GAIN & FL HEAT", kFLAccentOrange);
-    drawFLCard ({ 5.0f, 198.0f, col1W - 10.0f, 224.0f }, "COMPRESSOR (FAST ATK)", kFLAccentCyan);
-    drawFLCard ({ 5.0f, 427.0f, col1W - 10.0f, 285.0f }, "GATE / EXPAND (FAST ATK)", kFLAccentCyan);
-    drawFLCard ({ 5.0f, 717.0f, col1W - 10.0f, 198.0f }, "FILTERS (HP / LP + dB/OCT)", kFLAccentCyan);
+    drawFLCard ({ 5.0f,   5.0f, col1W - 10.0f, 188.0f }, "INPUT GAIN CONSOLE", kFLAccentOrange, true);
+    drawFLCard ({ 5.0f, 198.0f, col1W - 10.0f, 224.0f }, "COMPRESSOR (FAST ATK)", kFLAccentCyan, true);
+    drawFLCard ({ 5.0f, 427.0f, col1W - 10.0f, 285.0f }, "GATE / EXPAND (FAST ATK)", kFLAccentCyan, true);
+    drawFLCard ({ 5.0f, 717.0f, col1W - 10.0f, 198.0f }, "FILTERS (HP / LP + dB/OCT)", kFLAccentCyan, true);
 
     // =========================================================================
     // COLUMN 2: Separated EQ HF, EQ MID (HMF & LMF), EQ LF, DE-ESSER, and MID/SIDE!
     // =========================================================================
-    drawFLCard ({ col1W + 5.0f,   5.0f, col2W - 10.0f, 118.0f }, "EQ HF (HIGH)", kFLAccentRed);
-    drawFLCard ({ col1W + 5.0f, 128.0f, col2W - 10.0f, 250.0f }, "EQ MID (HMF & LMF)", kFLAccentCyan);
-    drawFLCard ({ col1W + 5.0f, 383.0f, col2W - 10.0f, 178.0f }, "EQ LF (LOW)", kFLAccentOrange);
-    drawFLCard ({ col1W + 5.0f, 566.0f, col2W - 10.0f, 174.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed);
-    drawFLCard ({ col1W + 5.0f, 745.0f, col2W - 10.0f, 170.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan);
+    drawFLCard ({ col1W + 5.0f,   5.0f, col2W - 10.0f, 118.0f }, "EQ HF (HIGH)", kFLAccentRed, true);
+    drawFLCard ({ col1W + 5.0f, 128.0f, col2W - 10.0f, 250.0f }, "EQ MID (HMF & LMF)", kFLAccentCyan, true);
+    drawFLCard ({ col1W + 5.0f, 383.0f, col2W - 10.0f, 178.0f }, "EQ LF (LOW)", kFLAccentOrange, true);
+    drawFLCard ({ col1W + 5.0f, 566.0f, col2W - 10.0f, 174.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed, true);
+    drawFLCard ({ col1W + 5.0f, 745.0f, col2W - 10.0f, 170.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan, true);
 
     // =========================================================================
     // COLUMN 3: INFLATE at top, MASTER FADER + DUAL L/R METER in middle,
     //           and CHANNELSTRIP + papielguapo signature BELOW the slider!
     // =========================================================================
-    drawFLCard ({ col3X + 5.0f,   5.0f, col3W - 10.0f, 154.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange);
-    drawFLCard ({ col3X + 5.0f, 164.0f, col3W - 10.0f, 624.0f }, "MASTER OUT & L/R METER", kFLAccentCyan);
-    drawFLCard ({ col3X + 5.0f, 793.0f, col3W - 10.0f, 122.0f }, "", kFLAccentOrange);
+    drawFLCard ({ col3X + 5.0f,   5.0f, col3W - 10.0f, 154.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange, true);
+    drawFLCard ({ col3X + 5.0f, 164.0f, col3W - 10.0f, 624.0f }, "MASTER OUT & L/R METER", kFLAccentCyan, true);
+    drawFLCard ({ col3X + 5.0f, 793.0f, col3W - 10.0f, 122.0f }, "", kFLAccentOrange, false);
 
     g.setColour (Colour (0xff0b0d10));
     g.drawRect (0, 0, w, h, 1);
@@ -287,8 +384,10 @@ public:
 
         Path bgArc;
         bgArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
-        g.setColour (kFLBevelDark);
-        g.strokePath (bgArc, PathStrokeType (trackW + 1.4f, PathStrokeType::curved, PathStrokeType::rounded));
+        g.setColour (Colour (0xff0b0d10));
+        g.strokePath (bgArc, PathStrokeType (trackW + 2.4f, PathStrokeType::curved, PathStrokeType::rounded));
+        g.setColour (Colour (0xff181b1f));
+        g.strokePath (bgArc, PathStrokeType (trackW + 0.8f, PathStrokeType::curved, PathStrokeType::rounded));
 
         const float startValAngle = isBipolar
             ? (rotaryStartAngle + 0.5f * (rotaryEndAngle - rotaryStartAngle))
@@ -298,34 +397,66 @@ public:
             Path valArc;
             valArc.addCentredArc (cx, cy, arcRad, arcRad, 0.0f,
                                   std::min (startValAngle, angle), std::max (startValAngle, angle), true);
-            g.setColour (accent.withAlpha (0.25f));
-            g.strokePath (valArc, PathStrokeType (trackW + 4.2f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (accent.withAlpha (0.18f));
+            g.strokePath (valArc, PathStrokeType (trackW + 7.0f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (accent.withAlpha (0.38f));
+            g.strokePath (valArc, PathStrokeType (trackW + 3.4f, PathStrokeType::curved, PathStrokeType::rounded));
             g.setColour (accent);
             g.strokePath (valArc, PathStrokeType (trackW, PathStrokeType::curved, PathStrokeType::rounded));
+            g.setColour (Colours::white.withAlpha (0.45f));
+            g.strokePath (valArc, PathStrokeType (trackW * 0.35f, PathStrokeType::curved, PathStrokeType::rounded));
         }
 
-        g.setColour (Colours::black.withAlpha (0.52f));
-        g.fillEllipse (cx - knobRad, cy - knobRad + 2.0f, knobRad * 2.0f, knobRad * 2.0f);
+        // Deep drop shadow under 3D hardware knob
+        g.setColour (Colours::black.withAlpha (0.76f));
+        g.fillEllipse (cx - knobRad - 1.5f, cy - knobRad + 2.8f, (knobRad + 1.5f) * 2.0f, (knobRad + 1.5f) * 2.0f);
 
-        g.setColour (Colour (0xff14171a));
-        g.fillEllipse (cx - knobRad - 1.2f, cy - knobRad - 1.2f, (knobRad + 1.2f) * 2.0f, (knobRad + 1.2f) * 2.0f);
+        // Outer dark skirt & knurled serrations (32 teeth around the knob skirt)
+        const float skirtRad = knobRad + 2.2f;
+        ColourGradient skirtGrad (Colour (0xff2b3036), cx, cy - skirtRad,
+                                  Colour (0xff0d0f12), cx, cy + skirtRad, false);
+        g.setGradientFill (skirtGrad);
+        g.fillEllipse (cx - skirtRad, cy - skirtRad, skirtRad * 2.0f, skirtRad * 2.0f);
 
-        ColourGradient capGrad (Colour (0xff383e44), cx, cy - knobRad,
-                                Colour (0xff202428), cx, cy + knobRad, false);
-        g.setGradientFill (capGrad);
+        constexpr int kNumKnurls = 28;
+        for (int k = 0; k < kNumKnurls; ++k)
+        {
+            const float ka = static_cast<float> (k) * (MathConstants<float>::twoPi / static_cast<float> (kNumKnurls));
+            const float kx1 = cx + std::cos (ka) * (knobRad * 0.90f);
+            const float ky1 = cy + std::sin (ka) * (knobRad * 0.90f);
+            const float kx2 = cx + std::cos (ka) * (skirtRad - 0.3f);
+            const float ky2 = cy + std::sin (ka) * (skirtRad - 0.3f);
+            g.setColour ((k & 1) ? Colours::white.withAlpha (0.14f) : Colours::black.withAlpha (0.65f));
+            g.drawLine (kx1, ky1, kx2, ky2, 1.0f);
+        }
+
+        // Chamfered metallic silver/gunmetal bezel ring (like hardware SSL/console knobs)
+        ColourGradient rimGrad (Colour (0xff8a939e), cx - knobRad * 0.5f, cy - knobRad,
+                                Colour (0xff252a30), cx + knobRad * 0.5f, cy + knobRad, false);
+        g.setGradientFill (rimGrad);
         g.fillEllipse (cx - knobRad, cy - knobRad, knobRad * 2.0f, knobRad * 2.0f);
-        g.setColour (Colour (0xff4a525a).withAlpha (0.55f));
-        g.drawEllipse (cx - knobRad + 0.8f, cy - knobRad + 0.8f, (knobRad - 0.8f) * 2.0f, (knobRad - 0.8f) * 2.0f, 0.9f);
 
+        // Recessed brushed aluminum top cap
+        const float capRad = knobRad * 0.84f;
+        ColourGradient capGrad (Colour (0xff343a41), cx - capRad * 0.4f, cy - capRad,
+                                Colour (0xff181b1f), cx + capRad * 0.4f, cy + capRad, false);
+        g.setGradientFill (capGrad);
+        g.fillEllipse (cx - capRad, cy - capRad, capRad * 2.0f, capRad * 2.0f);
+
+        // Subtle top-left specular arc highlight on cap
+        g.setColour (Colours::white.withAlpha (0.18f));
+        g.drawEllipse (cx - capRad + 0.5f, cy - capRad + 0.5f, (capRad - 0.5f) * 2.0f, (capRad - 0.5f) * 2.0f, 0.8f);
+
+        // High-contrast engraved white pointer line with shadow
         const float pAng = angle - MathConstants<float>::halfPi;
-        const float px1 = cx + std::cos (pAng) * (knobRad * 0.28f);
-        const float py1 = cy + std::sin (pAng) * (knobRad * 0.28f);
-        const float px2 = cx + std::cos (pAng) * (knobRad * 0.86f);
-        const float py2 = cy + std::sin (pAng) * (knobRad * 0.86f);
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.drawLine (px1 + 0.6f, py1 + 0.8f, px2 + 0.6f, py2 + 0.8f, 2.2f);
-        g.setColour (Colour (0xfff4f7fa));
-        g.drawLine (px1, py1, px2, py2, 2.0f);
+        const float px1 = cx + std::cos (pAng) * (capRad * 0.24f);
+        const float py1 = cy + std::sin (pAng) * (capRad * 0.24f);
+        const float px2 = cx + std::cos (pAng) * (knobRad * 0.95f);
+        const float py2 = cy + std::sin (pAng) * (knobRad * 0.95f);
+        g.setColour (Colours::black.withAlpha (0.75f));
+        g.drawLine (px1 + 0.7f, py1 + 0.9f, px2 + 0.7f, py2 + 0.9f, 2.5f);
+        g.setColour (Colour (0xfff8fafc));
+        g.drawLine (px1, py1, px2, py2, 2.1f);
     }
 
     void drawLinearSlider (Graphics& g, int x, int y, int width, int height,
@@ -339,33 +470,63 @@ public:
         const float trackTop = static_cast<float> (y) + 18.0f;
         const float trackBot = static_cast<float> (y + height) - 18.0f;
 
-        const Rectangle<float> slot (cx - 3.2f, trackTop, 6.4f, trackBot - trackTop);
-        g.setColour (kFLBevelDark);
-        g.fillRoundedRectangle (slot, 3.0f);
-        g.setColour (Colour (0xff2c3136));
-        g.drawRoundedRectangle (slot, 3.0f, 0.9f);
+        // Deep recessed dark fader slot with inner shadow and metallic lip
+        const Rectangle<float> outerSlot (cx - 4.5f, trackTop - 2.0f, 9.0f, trackBot - trackTop + 4.0f);
+        g.setColour (Colour (0xff07080a));
+        g.fillRoundedRectangle (outerSlot, 3.5f);
+        g.setColour (Colour (0xff323840).withAlpha (0.65f));
+        g.drawRoundedRectangle (outerSlot, 3.5f, 0.9f);
 
         const float clampedPos = std::clamp (sliderPos, trackTop, trackBot);
-        const Rectangle<float> fill (cx - 2.0f, clampedPos, 4.0f, trackBot - clampedPos);
-        g.setColour (kFLAccentOrange.withAlpha (0.28f));
-        g.fillRoundedRectangle (fill.expanded (1.8f, 0.0f), 2.5f);
-        g.setColour (kFLAccentOrange);
-        g.fillRoundedRectangle (fill, 2.0f);
+        const Rectangle<float> fill (cx - 1.8f, clampedPos, 3.6f, trackBot - clampedPos);
+        g.setColour (kFLAccentOrange.withAlpha (0.24f));
+        g.fillRoundedRectangle (fill.expanded (1.8f, 0.0f), 2.0f);
+        g.setColour (kFLAccentOrange.withAlpha (0.85f));
+        g.fillRoundedRectangle (fill, 1.5f);
 
-        const float capW = 34.0f;
-        const float capH = 52.0f;
+        // Realistic sculpted brushed-aluminum console fader cap (matching reference image!)
+        const float capW = 36.0f;
+        const float capH = 54.0f;
         const Rectangle<float> cap (cx - capW * 0.5f,
                                     std::clamp (clampedPos - capH * 0.5f, trackTop - 12.0f, trackBot - capH + 12.0f),
                                     capW, capH);
-        g.setColour (Colours::black.withAlpha (0.60f));
-        g.fillRoundedRectangle (cap.translated (0.0f, 3.0f), 4.0f);
-        ColourGradient cg (Colour (0xff3c434a), cap.getX(), cap.getY(), Colour (0xff202428), cap.getX(), cap.getBottom(), false);
+
+        // Long realistic cast shadow below the fader cap
+        g.setColour (Colours::black.withAlpha (0.78f));
+        g.fillRoundedRectangle (cap.translated (0.0f, 4.5f).expanded (1.0f, 1.0f), 4.5f);
+
+        // Metallic silver/titanium multi-stop vertical gradient for curved fader profile
+        ColourGradient cg (Colour (0xff9aa3ad), cap.getX(), cap.getY(),
+                           Colour (0xff2b3036), cap.getX(), cap.getBottom(), false);
+        cg.addColour (0.14, Colour (0xffcdd4dc));
+        cg.addColour (0.42, Colour (0xff5c646d));
+        cg.addColour (0.50, Colour (0xff23272c));
+        cg.addColour (0.58, Colour (0xff7e8791));
+        cg.addColour (0.86, Colour (0xffb4bcc6));
         g.setGradientFill (cg);
         g.fillRoundedRectangle (cap, 4.0f);
-        g.setColour (Colour (0xff121417));
-        g.drawRoundedRectangle (cap, 4.0f, 1.1f);
-        g.setColour (kFLAccentOrange);
-        g.fillRect (cap.getX() + 3.0f, cap.getCentreY() - 1.2f, cap.getWidth() - 6.0f, 2.4f);
+
+        // Machined horizontal grip grooves across the fader cap
+        for (float gy : { -18.0f, -14.0f, -10.0f, 10.0f, 14.0f, 18.0f })
+        {
+            const float ly = cap.getCentreY() + gy;
+            g.setColour (Colours::black.withAlpha (0.55f));
+            g.drawHorizontalLine (roundToInt (ly), cap.getX() + 3.0f, cap.getRight() - 3.0f);
+            g.setColour (Colours::white.withAlpha (0.30f));
+            g.drawHorizontalLine (roundToInt (ly + 1.0f), cap.getX() + 3.0f, cap.getRight() - 3.0f);
+        }
+
+        // Outer dark edge & top specular highlight
+        g.setColour (Colour (0xff101316));
+        g.drawRoundedRectangle (cap, 4.0f, 1.2f);
+        g.setColour (Colours::white.withAlpha (0.45f));
+        g.drawRoundedRectangle (cap.reduced (1.0f), 3.2f, 0.8f);
+
+        // Crisp center index line (dark groove + bright white/silver center line)
+        g.setColour (Colour (0xff0b0d10));
+        g.fillRect (cap.getX() + 2.0f, cap.getCentreY() - 2.0f, cap.getWidth() - 4.0f, 4.0f);
+        g.setColour (Colour (0xfff4f7fa));
+        g.fillRect (cap.getX() + 2.5f, cap.getCentreY() - 0.9f, cap.getWidth() - 5.0f, 1.8f);
     }
 
     void drawButtonBackground (Graphics& g, Button& button,
@@ -376,26 +537,44 @@ public:
         const bool on = button.getToggleState();
         const String cid = button.getComponentID();
 
+        // Recessed dark mounting bezel around every hardware push-button
+        g.setColour (Colour (0xff0a0c0e));
+        g.fillRoundedRectangle (b.expanded (1.4f), 4.2f);
+        g.setColour (Colours::black.withAlpha (0.65f));
+        g.fillRoundedRectangle (b.translated (0.0f, 1.8f), 3.6f);
+
         const Colour glow = (cid == "RedBtn")   ? kFLAccentRed
                           : (cid == "GreenBtn" || cid == "CyanBtn") ? kFLAccentCyan
                                                 : kFLAccentOrange;
         if (on || down)
         {
-            g.setColour (glow.withAlpha (0.22f));
-            g.fillRoundedRectangle (b.expanded (1.2f), 3.5f);
-            ColourGradient fg (glow.brighter (0.12f), b.getX(), b.getY(),
-                               glow.darker (0.22f), b.getX(), b.getBottom(), false);
+            // Backlit illuminated hardware switch with soft outer bloom
+            g.setColour (glow.withAlpha (0.28f));
+            g.fillRoundedRectangle (b.expanded (2.0f), 4.5f);
+            ColourGradient fg (glow.brighter (0.25f), b.getX(), b.getY(),
+                               glow.darker (0.28f),   b.getX(), b.getBottom(), false);
             g.setGradientFill (fg);
-            g.fillRoundedRectangle (b, 3.0f);
-            g.setColour (Colours::white.withAlpha (0.35f));
-            g.drawRoundedRectangle (b.reduced (0.5f), 2.5f, 0.8f);
+            g.fillRoundedRectangle (b, 3.2f);
+
+            // Top specular glass highlight
+            g.setColour (Colours::white.withAlpha (0.48f));
+            g.drawHorizontalLine (roundToInt (b.getY() + 1.0f), b.getX() + 3.0f, b.getRight() - 3.0f);
+            g.setColour (Colours::white.withAlpha (0.32f));
+            g.drawRoundedRectangle (b.reduced (0.6f), 2.8f, 0.9f);
         }
         else
         {
-            g.setColour (over ? kFLButtonOff.brighter (0.12f) : kFLButtonOff);
-            g.fillRoundedRectangle (b, 3.0f);
-            g.setColour (kFLBevelDark);
-            g.drawRoundedRectangle (b, 3.0f, 1.0f);
+            // Tactile matte dark-grey hardware switch with 3D top bevel
+            const Colour topCol = over ? Colour (0xff434950) : Colour (0xff373c42);
+            const Colour botCol = over ? Colour (0xff262a2f) : Colour (0xff1f2327);
+            ColourGradient offGrad (topCol, b.getX(), b.getY(), botCol, b.getX(), b.getBottom(), false);
+            g.setGradientFill (offGrad);
+            g.fillRoundedRectangle (b, 3.2f);
+
+            g.setColour (Colours::white.withAlpha (0.16f));
+            g.drawHorizontalLine (roundToInt (b.getY() + 1.0f), b.getX() + 3.0f, b.getRight() - 3.0f);
+            g.setColour (Colour (0xff101215));
+            g.drawRoundedRectangle (b, 3.2f, 1.0f);
         }
     }
 
@@ -675,8 +854,8 @@ public:
         canvas.addAndMakeVisible (fader);
         faderAtt = std::make_unique<State::SliderAttachment> (state, "fader", fader);
 
-        // FL HEAT / OUTPUT EVEN & ODD selector button (all uniform size!)
-        setupParamBtn  (bHeatByp, "FL HEAT",  "AmberBtn", "heatBypass");
+        // TYPE: A (FL HEAT) / TYPE: B (OUTPUT EVEN & ODD) selector button (all uniform size!)
+        setupParamBtn  (bHeatByp, "TYPE: A",  "AmberBtn", "heatBypass");
         setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
         setupParamBtn  (bPad,     "MONO",     "AmberBtn", "pad20");
 
@@ -872,12 +1051,12 @@ private:
 
         // =====================================================================
         // COLUMN 1 (x = 0..192):
-        // - INPUT GAIN (-24..+48 dB before Input Meter) + FL HEAT (DRIVE & TONE)
+        // - INPUT GAIN (-24..+48 dB before Input Meter) + TYPE: A / TYPE: B (FL HEAT / EVEN & ODD)
         // - COMPRESSOR (Separated card: y = 198..422)
         // - GATE / EXPAND (Separated card: y = 427..712)
-        // - FILTERS: HP Hz, LP Hz + 1 BUTTON & 4 LEDs FOR dB/OCT (y = 717..915)
+        // - FILTERS: HP Hz, LP Hz + 2 Stepped Knobs FOR dB/OCT (y = 717..915)
         // =====================================================================
-        kInputGain.setBounds (20, 30, knobSz, knobSz);
+        kInputGain.setBounds (48, 30, knobSz, knobSz);
         bPhase.setBounds     (124, 24, btnW, btnH);
         bPad.setBounds       (124, 52, btnW, btnH);
         bHeatByp.setBounds   (124, 80, btnW, btnH);
@@ -972,9 +1151,9 @@ private:
 
     void syncDynamicStates()
     {
-        // Switch between FL HEAT (Drive/Tone) and OUTPUT EVEN/ODD Harmonics (0..100%)
+        // Switch between TYPE: A (FL HEAT Drive/Tone) and TYPE: B (OUTPUT EVEN/ODD Harmonics 0..100%)
         const bool isEvenOddMode = bHeatByp.getToggleState();
-        bHeatByp.setButtonText (isEvenOddMode ? "EVEN/ODD" : "FL HEAT");
+        bHeatByp.setButtonText (isEvenOddMode ? "TYPE: B" : "TYPE: A");
         bHeatByp.setComponentID (isEvenOddMode ? "CyanBtn" : "AmberBtn");
         kHeatDrive.setVisible (!isEvenOddMode);
         kHeatTone.setVisible  (!isEvenOddMode);
@@ -1111,11 +1290,12 @@ private:
                                 ? ((oddVal > evenVal + 0.5f) ? kFLAccentCyan : kFLAccentOrange)
                                 : ((hDrive < -0.05f) ? kFLAccentCyan : kFLAccentOrange);
         const bool   colorLit   = evenOddMode ? (evenVal > 0.5f || oddVal > 0.5f) : (std::abs (hDrive) > 0.05f);
+        // OVER LED on the left of the INPUT +48 dB knob, with "OVER" text to the right of the LED!
+        drawIndicatorLed (g, 14.0f, 36.0f, 7.5f, kLedRed,
+                          telemetry.inputOverload.load (std::memory_order_relaxed));
         g.setColour (silkCol);
         g.setFont (getFLFont (8.2f, true));
-        g.drawText ("OVER", 76, 28, 30, 12, Justification::centredRight);
-        drawIndicatorLed (g, 113.0f, 34.0f, 7.5f, kLedRed,
-                          telemetry.inputOverload.load (std::memory_order_relaxed));
+        g.drawText ("OVER", 21, 30, 28, 12, Justification::centredLeft);
         drawIndicatorLed (g, 110.0f, 91.0f, 7.5f, heatLedCol, colorLit);
 
         drawDialRingAndLabels (g, kInputGain, {}, "INPUT +48 dB");
