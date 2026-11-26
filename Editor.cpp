@@ -122,7 +122,7 @@ void drawCurveGlyph (Graphics& g, float cx, float cy, int type, Colour col) noex
         p.lineTo (cx + 7.0f, cy + 3.5f);
     }
     g.setColour (col);
-    g.strokePath (p, PathStrokeType (1.3f));
+    g.strokePath (p, PathStrokeType (1.4f));
 }
 
 Image createFLHeatBackdrop (int w, int h)
@@ -152,31 +152,41 @@ Image createFLHeatBackdrop (int w, int h)
 
         if (title.isNotEmpty())
         {
-            Rectangle<float> hdr (r.getX() + 1.0f, r.getY() + 1.0f, r.getWidth() - 2.0f, 17.0f);
+            Rectangle<float> hdr (r.getX() + 1.0f, r.getY() + 1.0f, r.getWidth() - 2.0f, 19.0f);
             g.setColour (Colour (0xff16181b));
             g.fillRoundedRectangle (hdr, 4.0f);
             g.setColour (dotCol);
-            g.fillEllipse (hdr.getX() + 6.0f, hdr.getCentreY() - 2.5f, 5.0f, 5.0f);
+            g.fillEllipse (hdr.getX() + 6.0f, hdr.getCentreY() - 2.8f, 5.6f, 5.6f);
             g.setColour (kFLTextBright);
-            g.setFont (getFLFont (9.0f, true));
+            g.setFont (getFLFont (10.5f, true));
             g.drawText (title, hdr.withTrimmedLeft (15.0f), Justification::centredLeft, false);
         }
     };
 
-    // Column 1: INPUT + FL HEAT (Drive & Tone), Dynamics & Gate, Filters
-    drawFLCard ({ 5.0f, 5.0f, col1W - 10.0f, 188.0f }, "INPUT GAIN & FL HEAT", kFLAccentOrange);
-    drawFLCard ({ 5.0f, 198.0f, col1W - 10.0f, 514.0f }, "DYNAMICS & GATE (FAST ATK)", kFLAccentCyan);
+    // =========================================================================
+    // COLUMN 1: Separated COMPRESSOR and GATE / EXPAND cards!
+    // =========================================================================
+    drawFLCard ({ 5.0f,   5.0f, col1W - 10.0f, 188.0f }, "INPUT GAIN & FL HEAT", kFLAccentOrange);
+    drawFLCard ({ 5.0f, 198.0f, col1W - 10.0f, 224.0f }, "COMPRESSOR (FAST ATK)", kFLAccentCyan);
+    drawFLCard ({ 5.0f, 427.0f, col1W - 10.0f, 285.0f }, "GATE / EXPAND (FAST ATK)", kFLAccentCyan);
     drawFLCard ({ 5.0f, 717.0f, col1W - 10.0f, 198.0f }, "FILTERS (HP / LP + dB/OCT)", kFLAccentCyan);
 
-    // Column 2: Compact 6-Knob EQ (HF, MID, LF + 2 Bell buttons), De-Esser (Split Band), and MID / SIDE below De-Esser!
-    drawFLCard ({ col1W + 5.0f, 5.0f,   col2W - 10.0f, 520.0f }, "EQ (HF / MID / LF)", kFLAccentOrange);
-    drawFLCard ({ col1W + 5.0f, 530.0f, col2W - 10.0f, 196.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed);
-    drawFLCard ({ col1W + 5.0f, 731.0f, col2W - 10.0f, 184.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan);
+    // =========================================================================
+    // COLUMN 2: Separated EQ HF, EQ MID (HMF & LMF), EQ LF, DE-ESSER, and MID/SIDE!
+    // =========================================================================
+    drawFLCard ({ col1W + 5.0f,   5.0f, col2W - 10.0f, 118.0f }, "EQ HF (HIGH)", kFLAccentRed);
+    drawFLCard ({ col1W + 5.0f, 128.0f, col2W - 10.0f, 250.0f }, "EQ MID (HMF & LMF)", kFLAccentCyan);
+    drawFLCard ({ col1W + 5.0f, 383.0f, col2W - 10.0f, 178.0f }, "EQ LF (LOW)", kFLAccentOrange);
+    drawFLCard ({ col1W + 5.0f, 566.0f, col2W - 10.0f, 174.0f }, "VOCALS DE-ESSER (SPLIT)", kFLAccentRed);
+    drawFLCard ({ col1W + 5.0f, 745.0f, col2W - 10.0f, 170.0f }, "MID / SIDE dB (OUTPUT)", kFLAccentCyan);
 
-    // Column 3: Header (ChannelStrip + papielguapo signature), INFLATE (above Master Fader!), and full-height MASTER FADER + DUAL L/R METER!
-    drawFLCard ({ col3X + 5.0f, 5.0f,   col3W - 10.0f, 122.0f }, "", kFLAccentOrange);
-    drawFLCard ({ col3X + 5.0f, 132.0f, col3W - 10.0f, 154.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange);
-    drawFLCard ({ col3X + 5.0f, 291.0f, col3W - 10.0f, 624.0f }, "MASTER OUT & L/R METER", kFLAccentCyan);
+    // =========================================================================
+    // COLUMN 3: INFLATE at top, MASTER FADER + DUAL L/R METER in middle,
+    //           and CHANNELSTRIP + papielguapo signature BELOW the slider!
+    // =========================================================================
+    drawFLCard ({ col3X + 5.0f,   5.0f, col3W - 10.0f, 154.0f }, "INFLATE & CLIP 0 dB", kFLAccentOrange);
+    drawFLCard ({ col3X + 5.0f, 164.0f, col3W - 10.0f, 624.0f }, "MASTER OUT & L/R METER", kFLAccentCyan);
+    drawFLCard ({ col3X + 5.0f, 793.0f, col3W - 10.0f, 122.0f }, "", kFLAccentOrange);
 
     g.setColour (Colour (0xff0b0d10));
     g.drawRect (0, 0, w, h, 1);
@@ -188,7 +198,6 @@ class FLHeatLookAndFeel final : public LookAndFeel_V4
 public:
     FLHeatLookAndFeel()
     {
-        // Keep rotary slider text boxes 100% invisible when not actively typing!
         setColour (Slider::textBoxTextColourId, Colours::transparentBlack);
         setColour (Slider::textBoxBackgroundColourId, Colours::transparentBlack);
         setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
@@ -205,7 +214,7 @@ public:
         {
             const auto b = slider.getLocalBounds();
             layout.sliderBounds = b;
-            layout.textBoxBounds = Rectangle<int> (2, b.getCentreY() - 9, b.getWidth() - 4, 18);
+            layout.textBoxBounds = Rectangle<int> (2, b.getCentreY() - 10, b.getWidth() - 4, 20);
         }
         return layout;
     }
@@ -225,7 +234,7 @@ public:
             l->setColour (TextEditor::backgroundColourId, Colour (0xff121417));
             l->setColour (TextEditor::outlineColourId, kFLAccentOrange);
             l->setColour (TextEditor::focusedOutlineColourId, kFLAccentOrange);
-            l->setFont (getFLFont (10.0f, true));
+            l->setFont (getFLFont (11.5f, true));
             l->setInterceptsMouseClicks (false, false);
         }
         return l;
@@ -394,14 +403,14 @@ public:
         const bool on = button.getToggleState();
 
         g.setColour (on ? Colour (0xff121417) : kFLTextBright);
-        g.setFont (getFLFont (std::min (8.8f, b.getHeight() * 0.44f), true));
-        g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (2, 1), Justification::centred, 2);
+        g.setFont (getFLFont (10.0f, true));
+        g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (2, 1), Justification::centred, 1);
     }
 };
 
 // =========================================================================
-// Functional Rotary Knob: Drag to adjust, Click/Double-Click to type value,
-// Value Box is completely hidden unless actively typing!
+// Functional Rotary Knob: Click & Drag anywhere on the knob to move it smoothly!
+// Double-click or Right-click to type a numeric value directly.
 // =========================================================================
 class ConsoleDial final : public Slider
 {
@@ -409,15 +418,21 @@ public:
     ConsoleDial()
     {
         setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-        setTextBoxStyle (Slider::TextBoxBelow, false, 52, 18);
+        setTextBoxStyle (Slider::TextBoxBelow, false, 52, 20);
         setDoubleClickReturnValue (false, 0.0);
+        setSliderSnapsToMousePosition (false);
+        setMouseDragSensitivity (130);
         setWantsKeyboardFocus (true);
         setPopupDisplayEnabled (true, true, nullptr);
     }
 
+    bool hitTest (int x, int y) override
+    {
+        return getLocalBounds().contains (x, y);
+    }
+
     void mouseDown (const MouseEvent& e) override
     {
-        dragMoved = false;
         if (e.mods.isRightButtonDown())
         {
             showTextBox();
@@ -426,27 +441,10 @@ public:
         Slider::mouseDown (e);
     }
 
-    void mouseDrag (const MouseEvent& e) override
-    {
-        if (e.getDistanceFromDragStart() > 2)
-            dragMoved = true;
-        Slider::mouseDrag (e);
-    }
-
-    void mouseUp (const MouseEvent& e) override
-    {
-        Slider::mouseUp (e);
-        if (!dragMoved && !e.mods.isRightButtonDown() && e.getNumberOfClicks() >= 1)
-            showTextBox();
-    }
-
     void mouseDoubleClick (const MouseEvent&) override
     {
         showTextBox();
     }
-
-private:
-    bool dragMoved = false;
 };
 
 // =========================================================================
@@ -468,7 +466,7 @@ public:
         setLookAndFeel (&lnf);
 
         addAndMakeVisible (canvas);
-        canvas.setInterceptsMouseClicks (false, true);
+        canvas.setInterceptsMouseClicks (true, true);
 
         // 1. HIGH-GAIN INPUT (-24..+48 dB before Input Meter) + FL HEAT (DRIVE & TONE)
         setupKnob (kInputGain, "preamp",        "SSLSilver");
@@ -489,13 +487,17 @@ public:
         setupKnob (kHpf,       "hpf",           "SSLSilver");
         setupKnob (kLpf,       "lpf",           "SSLSilver");
 
-        // 5. COMPACT EQ (7 KNOBS: HF dB & Hz, MID dB, Q/BELL & Hz, LF dB & Hz + 2 BELL BUTTONS)
+        // 5. 4-BAND EQ (10 KNOBS: HF dB & Hz, HMF dB, BELL Q & Hz, LMF dB, BELL Q & Hz, LF dB & Hz + 2 BELL BUTTONS)
         setupKnob (kHfGain,    "highGain",      "SSLRed");
         setupKnob (kHfFreq,    "highFreq",      "SSLRed");
 
         setupKnob (kMidGain,   "highMidGain",   "SSLGreen");
         setupKnob (kMidQ,      "highMidQ",      "SSLGreen");
         setupKnob (kMidFreq,   "highMidFreq",   "SSLGreen");
+
+        setupKnob (kLmfGain,   "lowMidGain",    "SSLBlue");
+        setupKnob (kLmfQ,      "lowMidQ",       "SSLBlue");
+        setupKnob (kLmfFreq,   "lowMidFreq",    "SSLBlue");
 
         setupKnob (kLfGain,    "lowGain",       "SSLBrown");
         setupKnob (kLfFreq,    "lowFreq",       "SSLBrown");
@@ -520,50 +522,50 @@ public:
         canvas.addAndMakeVisible (fader);
         faderAtt = std::make_unique<State::SliderAttachment> (state, "fader", fader);
 
-        // FL HEAT section buttons
-        setupParamBtn  (bHeatByp, "HEAT BYPASS",   "RedBtn",   "heatBypass");
+        // FL HEAT section buttons (all uniform size!)
+        setupParamBtn  (bHeatByp, "HEAT BYP", "RedBtn",   "heatBypass");
         setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
-        setupParamBtn  (bPad,     "PAD -20 dB",    "AmberBtn", "pad20");
+        setupParamBtn  (bPad,     "-20 dB",   "AmberBtn", "pad20");
 
         // Dynamics buttons
-        setupParamBtn  (bLink,    "EXT SIDECHAIN", "AmberBtn", "extSidechain");
-        setupActionBtn (bExpSel,  "MODO: GATE",    "CyanBtn",  [this] { toggleChoice ("gateMode"); });
-        setupParamBtn  (bDynIn,   "DYN\nON",       "CyanBtn",  "dynIn");
-        setupParamBtn  (bExpIn,   "GATE\nON",      "RedBtn",   "expIn");
-        setupParamBtn  (bCmpIn,   "COMP\nON",      "AmberBtn", "cmpIn");
+        setupParamBtn  (bLink,    "EXT SC",   "AmberBtn", "extSidechain");
+        setupActionBtn (bExpSel,  "GATE",     "CyanBtn",  [this] { toggleChoice ("gateMode"); });
+        setupParamBtn  (bDynIn,   "COMP SC",  "CyanBtn",  "fltDynSc");
+        setupParamBtn  (bExpIn,   "GATE ON",  "RedBtn",   "expIn");
+        setupParamBtn  (bCmpIn,   "COMP ON",  "AmberBtn", "cmpIn");
 
         // Filter Slope selector button (cycles 6, 12, 18, 24 dB/oct with 4 LEDs)
-        setupActionBtn (bSlope,   "PENDIENTE dB/OCT", "AmberBtn", [this] { toggleChoice ("filterSlope"); });
+        setupActionBtn (bSlope,   "dB/OCT",   "AmberBtn", [this] { toggleChoice ("filterSlope"); });
 
         // EQ Bell buttons & Black/Brown curve button
-        setupParamBtn  (bHfBell,  "HF CAMPANA",    "RedBtn",   "hfBell");
-        setupActionBtn (bEqSel,   "CURVA BLK/BRN", "AmberBtn", [this] { toggleChoice ("eqMode"); });
-        setupParamBtn  (bLfBell,  "LF CAMPANA",    "AmberBtn", "lfBell");
-        setupParamBtn  (bEqIn,    "EQ\nON",        "CyanBtn",  "eqIn");
-        setupParamBtn  (bEqSc,    "EQ A\nSIDECHAIN","RedBtn",  "eqDynSc");
-        setupParamBtn  (bEqPre,   "EQ ANTES\nCOMP","AmberBtn", "eqPreDyn");
+        setupParamBtn  (bHfBell,  "BELL",     "RedBtn",   "hfBell");
+        setupActionBtn (bEqSel,   "BLK/BRN",  "AmberBtn", [this] { toggleChoice ("eqMode"); });
+        setupParamBtn  (bLfBell,  "BELL",     "AmberBtn", "lfBell");
+        setupParamBtn  (bEqIn,    "EQ ON",    "CyanBtn",  "eqIn");
+        setupParamBtn  (bEqSc,    "EQ SC",    "RedBtn",   "eqDynSc");
+        setupParamBtn  (bEqPre,   "PRE DYN",  "AmberBtn", "eqPreDyn");
 
         // SSL-format De-Esser Split Band button
-        setupParamBtn  (bDeEss,   "DE-ESS\nSPLIT BAND", "AmberBtn", "deEss");
+        setupParamBtn  (bDeEss,   "DE-ESS",   "AmberBtn", "deEss");
 
         // OUTPUT Inflate CLIP 0 dB button
-        setupParamBtn  (bClip0,   "CLIP 0 dB",     "RedBtn",   "inflateClip");
+        setupParamBtn  (bClip0,   "CLIP 0",   "RedBtn",   "inflateClip");
 
         // General Dual L/R Meter IN / OUT Selector (IN = Pre-HEAT Input, OUT = Final Post-Fader Output)
-        setupActionBtn (bInOutMeter, "METER: OUT", "CyanBtn", [this]
+        setupActionBtn (bInOutMeter, "MTR OUT", "CyanBtn", [this]
         {
             showPreHeatInputMeter = !showPreHeatInputMeter;
             bInOutMeter.setToggleState (showPreHeatInputMeter, dontSendNotification);
-            bInOutMeter.setButtonText (showPreHeatInputMeter ? "METER: IN" : "METER: OUT");
+            bInOutMeter.setButtonText (showPreHeatInputMeter ? "MTR IN" : "MTR OUT");
         });
         bInOutMeter.setToggleState (false, dontSendNotification);
 
         // dBFS Peak vs -18 dBFS RMS (0 VU Calibrated) Scale Selector Button
-        setupActionBtn (bMeterScale, "dBFS PEAK", "AmberBtn", [this]
+        setupActionBtn (bMeterScale, "PEAK dB", "AmberBtn", [this]
         {
             useCalibratedRms18 = !useCalibratedRms18;
             bMeterScale.setToggleState (useCalibratedRms18, dontSendNotification);
-            bMeterScale.setButtonText (useCalibratedRms18 ? "-18 RMS VU" : "dBFS PEAK");
+            bMeterScale.setButtonText (useCalibratedRms18 ? "-18 VU" : "PEAK dB");
         });
         bMeterScale.setToggleState (false, dontSendNotification);
 
@@ -571,10 +573,10 @@ public:
         layoutCanvasControls();
         syncDynamicStates();
 
+        // Always open in compact / small window size by default!
         setResizable (true, true);
-        const auto area = Desktop::getInstance().getDisplays().getPrimaryDisplay()->userArea;
-        const float initScale = (area.getHeight() < 980) ? 0.85f : 1.0f;
-        setResizeLimits (roundToInt (kBaseW * 0.65f), roundToInt (kBaseH * 0.65f),
+        constexpr float initScale = 0.72f;
+        setResizeLimits (roundToInt (kBaseW * 0.55f), roundToInt (kBaseH * 0.55f),
                          roundToInt (kBaseW * 1.35f), roundToInt (kBaseH * 1.35f));
         if (auto* c = getConstrainer())
             c->setFixedAspectRatio (static_cast<double> (kBaseW) / static_cast<double> (kBaseH));
@@ -609,7 +611,7 @@ public:
     {
         useCalibratedRms18 = enabled;
         bMeterScale.setToggleState (enabled, dontSendNotification);
-        bMeterScale.setButtonText (enabled ? "-18 RMS VU" : "dBFS PEAK");
+        bMeterScale.setButtonText (enabled ? "-18 VU" : "PEAK dB");
     }
 
     void renderSnapshotToFile (const File& pngFile)
@@ -635,6 +637,12 @@ private:
     public:
         explicit CanvasComponent (SurcoEditor& o) : owner (o) {}
         void paint (Graphics& g) override { owner.paintCanvas (g); }
+        void mouseDoubleClick (const MouseEvent&) override
+        {
+            owner.toggleChoice ("oversampling");
+            owner.syncDynamicStates();
+            repaint();
+        }
     private:
         SurcoEditor& owner;
     };
@@ -696,96 +704,104 @@ private:
 
     void layoutCanvasControls()
     {
-        constexpr int knobSz = 62;
-        constexpr int eqKnob = 54;
+        constexpr int knobSz = 60;
+        constexpr int eqKnob = 48;
+        // Every single button in the plugin uses the exact same hardware dimensions!
+        constexpr int btnW   = 52;
+        constexpr int btnH   = 22;
 
         // =====================================================================
         // COLUMN 1 (x = 0..192):
         // - INPUT GAIN (-24..+48 dB before Input Meter) + FL HEAT (DRIVE & TONE)
-        // - DYNAMICS: RATIO, THRESHOLD, RELEASE
-        // - GATE: THRESHOLD, RANGE EXPAND, RELEASE
-        // - FILTERS: HP Hz, LP Hz + 1 BUTTON & 4 LEDs FOR dB/OCT (6, 12, 18, 24)
+        // - COMPRESSOR (Separated card: y = 198..422)
+        // - GATE / EXPAND (Separated card: y = 427..712)
+        // - FILTERS: HP Hz, LP Hz + 1 BUTTON & 4 LEDs FOR dB/OCT (y = 717..915)
         // =====================================================================
         kInputGain.setBounds (18, 28, 56, 56);
-        bPhase.setBounds     (104, 28, 78, 22);
-        bPad.setBounds       (104, 56, 78, 22);
+        bPhase.setBounds     (124, 24, btnW, btnH);
+        bPad.setBounds       (124, 52, btnW, btnH);
+        bHeatByp.setBounds   (124, 80, btnW, btnH);
 
-        kHeatDrive.setBounds (14, 108, 54, 54);
-        kHeatTone.setBounds  (74, 108, 54, 54);
-        bHeatByp.setBounds   (134, 118, 48, 32);
+        kHeatDrive.setBounds (24, 114, 54, 54);
+        kHeatTone.setBounds  (96, 114, 54, 54);
 
-        // Dynamics (Comp): Ratio, Threshold, Release
-        kCompRat.setBounds (20, 224, knobSz, knobSz);
-        bLink.setBounds    (102, 232, 80, 22);
-        kCompThr.setBounds (108, 282, knobSz, knobSz);
-        kCompRel.setBounds (20, 332, knobSz, knobSz);
+        // COMPRESSOR Card (y = 198..422)
+        kCompRat.setBounds (18, 224, knobSz, knobSz);
+        bLink.setBounds    (118, 234, btnW, btnH);
+        kCompThr.setBounds (110, 276, knobSz, knobSz);
+        kCompRel.setBounds (18, 324, knobSz, knobSz);
 
-        // Gate / Expand: Threshold, Range Expand, Release
-        kExpThr.setBounds  (108, 400, knobSz, knobSz);
-        kExpRng.setBounds  (20, 470, knobSz, knobSz);
-        bExpSel.setBounds  (102, 488, 80, 22);
-        kExpRel.setBounds  (20, 568, knobSz, knobSz);
+        // GATE / EXPAND Card (y = 427..712)
+        kExpThr.setBounds  (110, 448, 56, 56);
+        kExpRng.setBounds  (18,  458, 56, 56);
+        bExpSel.setBounds  (116, 520, btnW, btnH);
+        kExpRel.setBounds  (18,  556, 56, 56);
 
-        // Dynamics section enable buttons
-        bDynIn.setBounds (22,  652, 44, 34);
-        bExpIn.setBounds (74,  652, 44, 34);
-        bCmpIn.setBounds (126, 652, 44, 34);
+        // Dynamics section enable buttons (3 identical buttons)
+        bDynIn.setBounds (12,  658, btnW, btnH);
+        bExpIn.setBounds (70,  658, btnW, btnH);
+        bCmpIn.setBounds (128, 658, btnW, btnH);
 
         // Filters: HP Hz & LP Hz (2 knobs) + 1 Button & 4 LEDs (6, 12, 18, 24 dB/oct)
         kHpf.setBounds   (22, 748, knobSz, knobSz);
         kLpf.setBounds   (108, 748, knobSz, knobSz);
-        bSlope.setBounds (36, 844, 120, 24);
+        bSlope.setBounds (70, 844, btnW, btnH);
 
         // =====================================================================
         // COLUMN 2 (x = 192..384):
-        // - COMPACT EQ 6 KNOBS: HF (dB, Hz), MID (dB, Hz), LF (dB, Hz) + 2 BELL BUTTONS
-        // - DE-ESSER: 2 KNOBS (FREQ, THRESH) + 1 SSL SPLIT BAND BUTTON
-        // - MID / SIDE dB (from OUTPUT): 2 KNOBS BELOW DE-ESSER!
+        // - EQ HF Card (y = 5..123)
+        // - EQ MID (HMF & LMF) Card (y = 128..378)
+        // - EQ LF Card (y = 383..561)
+        // - DE-ESSER Card (y = 566..740)
+        // - MID / SIDE dB Card (y = 745..915)
         // =====================================================================
-        // HF Band (Compact row: HF dB & HF kHz side-by-side + HF CAMPANA button)
-        kHfGain.setBounds  (212, 32, eqKnob, eqKnob);
-        kHfFreq.setBounds  (302, 32, eqKnob, eqKnob);
-        bHfBell.setBounds  (242, 108, 92, 22);
+        // EQ HF Card
+        kHfGain.setBounds  (212, 30, eqKnob, eqKnob);
+        kHfFreq.setBounds  (316, 30, eqKnob, eqKnob);
+        bHfBell.setBounds  (262, 92, btnW, btnH);
 
-        // MID Band (3 knobs side-by-side: MID dB, BELL Q, MID kHz + CURVA BLK/BRN button)
-        kMidGain.setBounds (200, 166, 50, 50);
-        kMidQ.setBounds    (263, 166, 50, 50);
-        kMidFreq.setBounds (326, 166, 50, 50);
-        bEqSel.setBounds   (240, 242, 96, 22);
+        // EQ MID Card (HMF row + LMF row + BLK/BRN button)
+        kMidGain.setBounds (200, 152, eqKnob, eqKnob);
+        kMidQ.setBounds    (264, 152, eqKnob, eqKnob);
+        kMidFreq.setBounds (328, 152, eqKnob, eqKnob);
+        bEqSel.setBounds   (262, 224, btnW, btnH);
 
-        // LF Band (Compact row: LF dB & LF Hz side-by-side + LF CAMPANA button)
-        kLfGain.setBounds  (212, 314, eqKnob, eqKnob);
-        kLfFreq.setBounds  (302, 314, eqKnob, eqKnob);
-        bLfBell.setBounds  (242, 390, 92, 22);
+        kLmfGain.setBounds (200, 272, eqKnob, eqKnob);
+        kLmfQ.setBounds    (264, 272, eqKnob, eqKnob);
+        kLmfFreq.setBounds (328, 272, eqKnob, eqKnob);
 
-        // Equaliser routing buttons
-        bEqIn.setBounds    (206, 446, 52, 34);
-        bEqSc.setBounds    (262, 446, 52, 34);
-        bEqPre.setBounds   (318, 446, 52, 34);
+        // EQ LF Card (LF row + LF BELL + EQ routing buttons)
+        kLfGain.setBounds  (212, 408, eqKnob, eqKnob);
+        kLfFreq.setBounds  (316, 408, eqKnob, eqKnob);
+        bLfBell.setBounds  (262, 470, btnW, btnH);
 
-        // DE-ESS Section (y = 530..726): 2 Knobs (FREQ & THRESH) + 1 SSL Format SPLIT BAND Button
-        kDsFreq.setBounds  (214, 560, eqKnob, eqKnob);
-        kDsThr.setBounds   (302, 560, eqKnob, eqKnob);
-        bDeEss.setBounds   (234, 658, 108, 32);
+        bEqIn.setBounds    (204, 514, btnW, btnH);
+        bEqSc.setBounds    (262, 514, btnW, btnH);
+        bEqPre.setBounds   (320, 514, btnW, btnH);
 
-        // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 731..915)!
-        kMidDb.setBounds   (214, 774, knobSz, knobSz);
-        kSideDb.setBounds  (298, 774, knobSz, knobSz);
+        // DE-ESS Section (y = 566..740): 2 Knobs (FREQ & THRESH) + 1 SSL Button
+        kDsFreq.setBounds  (214, 592, 52, 52);
+        kDsThr.setBounds   (302, 592, 52, 52);
+        bDeEss.setBounds   (262, 696, btnW, btnH);
+
+        // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915)!
+        kMidDb.setBounds   (214, 782, 56, 56);
+        kSideDb.setBounds  (300, 782, 56, 56);
 
         // =====================================================================
         // COLUMN 3 (x = 384..540):
-        // - HEADER: CHANNELSTRIP + PAPIELGUAPO SIGNATURE (FROM OUTPUT)
-        // - INFLATE (ABOVE MASTER FADER): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB
-        // - MASTER OUT FADER + DUAL L/R GENERAL LED METER (NO OUTPUT TRIM KNOB)
+        // - INFLATE (TOP OF COLUMN 3, ABOVE MASTER FADER): 2 KNOBS (INFLATE & CURVE) + CLIP 0 dB
+        // - MASTER OUT FADER + DUAL L/R GENERAL LED METER
+        // - CHANNELSTRIP + PAPIELGUAPO SIGNATURE (BELOW THE SLIDER!)
         // =====================================================================
-        kInfEff.setBounds      (400, 156, eqKnob, eqKnob);
-        kInfCrv.setBounds      (472, 156, eqKnob, eqKnob);
-        bClip0.setBounds       (422, 246, 82, 22);
+        kInfEff.setBounds      (400, 30, 52, 52);
+        kInfCrv.setBounds      (472, 30, 52, 52);
+        bClip0.setBounds       (436, 120, btnW, btnH);
 
-        // General Dual L/R Meter Controls + Long Master Out Fader
-        bInOutMeter.setBounds  (392, 320, 66, 22);
-        bMeterScale.setBounds  (464, 320, 68, 22);
-        fader.setBounds        (466, 360, 44, 528);
+        // General Dual L/R Meter Controls (identical size!) + Long Master Out Fader
+        bInOutMeter.setBounds  (402, 192, btnW, btnH);
+        bMeterScale.setBounds  (468, 192, btnW, btnH);
+        fader.setBounds        (466, 232, 44, 528);
     }
 
     void syncDynamicStates()
@@ -795,7 +811,7 @@ private:
 
         const int gMode = roundToInt (state.getRawParameterValue ("gateMode")->load());
         bExpSel.setToggleState (gMode == 1, dontSendNotification);
-        bExpSel.setButtonText (gMode == 1 ? "MODO: EXPAND" : "MODO: GATE");
+        bExpSel.setButtonText (gMode == 1 ? "EXPAND" : "GATE");
 
         // Enforce 1 dB steps when HF or LF is in BELL mode, continuous when in SHELF mode
         kHfGain.setRange (-18.0, 18.0, bHfBell.getToggleState() ? 1.0 : 0.01);
@@ -872,16 +888,16 @@ private:
         if (topLabel.isNotEmpty())
         {
             g.setColour (kFLTextBright);
-            g.setFont (getFLFont (9.5f, true));
-            g.drawText (topLabel, Rectangle<float> (b.getX() - 10.0f, b.getY() - 12.0f, 64.0f, 12.0f),
+            g.setFont (getFLFont (11.0f, true));
+            g.drawText (topLabel, Rectangle<float> (b.getX() - 10.0f, b.getY() - 13.0f, 68.0f, 13.0f),
                         Justification::centredLeft, false);
         }
 
         if (bottomLabel.isNotEmpty())
         {
             g.setColour (kFLTextBright);
-            g.setFont (getFLFont (8.2f, true));
-            g.drawText (bottomLabel, Rectangle<float> (cx - 40.0f, cy + r + 6.5f, 80.0f, 18.0f),
+            g.setFont (getFLFont (10.0f, true));
+            g.drawText (bottomLabel, Rectangle<float> (cx - 42.0f, cy + r + 5.5f, 84.0f, 22.0f),
                         Justification::centredTop, false);
         }
     }
@@ -894,56 +910,57 @@ private:
         const Colour silkCol = kFLTextBright;
 
         // =====================================================================
-        // COLUMN 1: INPUT GAIN (+48 dB) + FL HEAT (DRIVE & TONE), DYNAMICS, GATE, FILTERS
+        // COLUMN 1: INPUT GAIN (+48 dB) + FL HEAT (DRIVE & TONE), COMPRESSOR, GATE, FILTERS
         // =====================================================================
         const float hDrive = state.getRawParameterValue ("heatDrive")->load();
         const bool  hByp   = bHeatByp.getToggleState();
         const Colour heatLedCol = (hDrive < -0.05f) ? kFLAccentCyan : kFLAccentOrange;
         drawIndicatorLed (g, 84.0f, 34.0f, 7.5f, kFLAccentCyan, std::abs (state.getRawParameterValue ("preamp")->load()) > 0.05f);
-        drawIndicatorLed (g, 158.0f, 106.0f, 7.5f, heatLedCol, !hByp && std::abs (hDrive) > 0.05f);
+        // HEAT BYP LED placed on the left side of the HEAT BYP button so the group stays centered!
+        drawIndicatorLed (g, 110.0f, 91.0f, 7.5f, heatLedCol, !hByp);
 
-        drawDialRingAndLabels (g, kInputGain, {}, "INPUT +48 dB", "INPUT");
+        drawDialRingAndLabels (g, kInputGain, {}, "INPUT +48 dB");
         drawDialRingAndLabels (g, kHeatDrive, {}, "HEAT DRIVE");
         drawDialRingAndLabels (g, kHeatTone,  {}, "HEAT TONE");
 
         g.setColour (silkCol);
-        g.setFont (getFLFont (7.8f, true));
-        g.drawText ("OVER", 136, 174, 34, 11, Justification::centredRight);
-        drawIndicatorLed (g, 178.0f, 179.0f, 7.2f, kLedRed,
+        g.setFont (getFLFont (8.8f, true));
+        g.drawText ("OVER", 132, 174, 38, 12, Justification::centredRight);
+        drawIndicatorLed (g, 178.0f, 180.0f, 7.2f, kLedRed,
                           telemetry.inputOverload.load (std::memory_order_relaxed));
 
-        // DYNAMICS (Compressor)
-        drawIndicatorLed (g, 142.0f, 220.0f, 7.5f, kLedAmber, bLink.getToggleState());
+        // COMPRESSOR Card
+        drawIndicatorLed (g, 142.0f, 222.0f, 7.5f, kLedAmber, bLink.getToggleState());
 
-        drawDialRingAndLabels (g, kCompRat, {}, "RATIO\nCOMPRESS");
+        drawDialRingAndLabels (g, kCompRat, {}, "RATIO");
         drawDialRingAndLabels (g, kCompThr, {}, "THRESHOLD");
         drawDialRingAndLabels (g, kCompRel, {}, "RELEASE");
 
         // Fixed Ultra-Fast Attack indicator (FAST ATK) for Compressor
-        drawIndicatorLed (g, 14.0f, 404.0f, 6.5f, kLedRed, true);
+        drawIndicatorLed (g, 92.0f, 396.0f, 6.8f, kLedRed, true);
         g.setColour (silkCol);
-        g.setFont (getFLFont (7.2f, true));
-        g.drawFittedText ("FAST\nATK", 2, 412, 26, 18, Justification::centred, 2);
+        g.setFont (getFLFont (8.2f, true));
+        g.drawText ("FAST ATK", 102, 390, 62, 12, Justification::centredLeft);
 
-        // GATE / EXPANDER
+        // GATE / EXPANDER Card
         drawDialRingAndLabels (g, kExpThr, {}, "THRESHOLD");
-        drawDialRingAndLabels (g, kExpRng, {}, "RANGE\nEXPAND");
+        drawDialRingAndLabels (g, kExpRng, {}, "RANGE");
         drawDialRingAndLabels (g, kExpRel, {}, "RELEASE");
 
         // Fixed Ultra-Fast Attack indicator (FAST ATK) for Gate
-        drawIndicatorLed (g, 14.0f, 634.0f, 6.5f, kLedRed, true);
+        drawIndicatorLed (g, 16.0f, 636.0f, 6.8f, kLedRed, true);
         g.setColour (silkCol);
-        g.setFont (getFLFont (7.2f, true));
-        g.drawFittedText ("FAST\nATK", 2, 642, 26, 18, Justification::centred, 2);
+        g.setFont (getFLFont (8.2f, true));
+        g.drawText ("FAST ATK", 26, 630, 62, 12, Justification::centredLeft);
 
         // EXP / GATE LEDs
         const int gMode = roundToInt (state.getRawParameterValue ("gateMode")->load());
         g.setColour (silkCol);
-        g.setFont (getFLFont (7.8f, true));
-        g.drawText ("EXP", 112, 514, 26, 10, Justification::centred);
-        g.drawText ("GATE", 142, 514, 30, 10, Justification::centred);
-        drawIndicatorLed (g, 125.0f, 530.0f, 7.0f, kLedAmber, gMode == 1);
-        drawIndicatorLed (g, 157.0f, 530.0f, 7.0f, kLedAmber, gMode == 0);
+        g.setFont (getFLFont (8.5f, true));
+        g.drawText ("EXP", 112, 544, 28, 11, Justification::centred);
+        g.drawText ("GATE", 142, 544, 32, 11, Justification::centred);
+        drawIndicatorLed (g, 126.0f, 560.0f, 7.0f, kLedAmber, gMode == 1);
+        drawIndicatorLed (g, 158.0f, 560.0f, 7.0f, kLedAmber, gMode == 0);
 
         // Dual 5-LED Gain Reduction & Gate Attenuation Ladders (3, 6, 10, 14, 20 dB)
         const float cmpGr = telemetry.compReductionDb.load (std::memory_order_relaxed);
@@ -951,17 +968,17 @@ private:
         constexpr float grSteps[5] = { 20.0f, 14.0f, 10.0f, 6.0f, 3.0f };
         for (int i = 0; i < 5; ++i)
         {
-            const float ly = 548.0f + i * 19.0f;
-            drawIndicatorLed (g, 120.0f, ly, 7.2f, kLedEmerald, expGr >= grSteps[i]);
+            const float ly = 576.0f + i * 16.5f;
+            drawIndicatorLed (g, 120.0f, ly, 7.0f, kLedEmerald, expGr >= grSteps[i]);
             g.setColour (silkCol);
-            g.setFont (getFLFont (7.8f, true));
+            g.setFont (getFLFont (8.4f, true));
             g.drawText (String (roundToInt (grSteps[i])), 128, roundToInt (ly - 5.0f), 22, 10, Justification::centred);
-            drawIndicatorLed (g, 158.0f, ly, 7.2f, i == 0 ? kLedRed : kLedAmber, cmpGr >= grSteps[i]);
+            drawIndicatorLed (g, 158.0f, ly, 7.0f, i == 0 ? kLedRed : kLedAmber, cmpGr >= grSteps[i]);
         }
 
-        drawIndicatorLed (g, 44.0f,  696.0f, 7.5f, kFLAccentCyan, bDynIn.getToggleState());
-        drawIndicatorLed (g, 96.0f,  696.0f, 7.5f, kLedRed,       bExpIn.getToggleState());
-        drawIndicatorLed (g, 148.0f, 696.0f, 7.5f, kLedAmber,     bCmpIn.getToggleState());
+        drawIndicatorLed (g, 38.0f,  692.0f, 7.5f, kFLAccentCyan, bDynIn.getToggleState());
+        drawIndicatorLed (g, 96.0f,  692.0f, 7.5f, kLedRed,       bExpIn.getToggleState());
+        drawIndicatorLed (g, 154.0f, 692.0f, 7.5f, kLedAmber,     bCmpIn.getToggleState());
 
         // FILTERS section: 2 Knobs (HP Hz & LP Hz) + 1 Button + 4 Slope LEDs (6, 12, 18, 24 dB/oct)
         drawDialRingAndLabels (g, kHpf, {}, "HP Hz");
@@ -977,43 +994,53 @@ private:
             const float lx = 34.0f + i * 41.0f;
             drawIndicatorLed (g, lx, 882.0f, 7.5f, i >= 2 ? kLedAmber : kFLAccentCyan, slopeIdx == i);
             g.setColour (silkCol);
-            g.setFont (getFLFont (7.8f, true));
-            g.drawText (slopeNames[i], roundToInt (lx - 18.0f), 892, 36, 11, Justification::centred);
+            g.setFont (getFLFont (8.8f, true));
+            g.drawText (slopeNames[i], roundToInt (lx - 18.0f), 892, 36, 12, Justification::centred);
         }
 
         // =====================================================================
-        // COLUMN 2: COMPACT EQ (HF, MID, LF) + DE-ESSER + MID/SIDE BELOW DE-ESSER
+        // COLUMN 2: SEPARATED EQ HF, EQ MID (HMF & LMF), EQ LF + DE-ESSER + MID/SIDE
         // =====================================================================
+        // EQ HF Card
         drawDialRingAndLabels (g, kHfGain,  {}, "HF dB");
         drawDialRingAndLabels (g, kHfFreq,  {}, "HF kHz");
-        drawIndicatorLed (g, 228.0f, 119.0f, 7.2f, kLedRed, bHfBell.getToggleState());
+        drawIndicatorLed (g, 248.0f, 103.0f, 7.0f, kLedRed, bHfBell.getToggleState());
 
-        drawDialRingAndLabels (g, kMidGain, {}, "MID dB");
+        // EQ MID Card: HMF row (High-Mid) + BLK/BRN + LMF row (Low-Mid)
+        drawDialRingAndLabels (g, kMidGain, {}, "HMF dB");
         drawDialRingAndLabels (g, kMidQ,    {}, "BELL Q");
-        drawCurveGlyph (g, 267.0f, 226.0f, 1, silkCol);
-        drawCurveGlyph (g, 309.0f, 226.0f, 0, silkCol);
-        drawDialRingAndLabels (g, kMidFreq, {}, "MID kHz");
-        const bool isBrown = bEqSel.getToggleState();
-        drawIndicatorLed (g, 268.0f, 274.0f, 7.2f, kLedAmber, !isBrown);
-        drawIndicatorLed (g, 308.0f, 274.0f, 7.2f, kLedAmber, isBrown);
-        g.setColour (silkCol);
-        g.setFont (getFLFont (7.8f, true));
-        g.drawText ("BLK     BRN", 252, 282, 72, 10, Justification::centred);
+        drawCurveGlyph (g, 267.0f, 210.0f, 1, silkCol);
+        drawCurveGlyph (g, 309.0f, 210.0f, 0, silkCol);
+        drawDialRingAndLabels (g, kMidFreq, {}, "HMF kHz");
 
+        const bool isBrown = bEqSel.getToggleState();
+        drawIndicatorLed (g, 246.0f, 235.0f, 7.0f, kLedAmber, !isBrown);
+        drawIndicatorLed (g, 330.0f, 235.0f, 7.0f, kLedAmber, isBrown);
+        g.setColour (silkCol);
+        g.setFont (getFLFont (8.4f, true));
+        g.drawText ("BLK", 224, 242, 30, 11, Justification::centred);
+        g.drawText ("BRN", 318, 242, 30, 11, Justification::centred);
+
+        drawDialRingAndLabels (g, kLmfGain, {}, "LMF dB");
+        drawDialRingAndLabels (g, kLmfQ,    {}, "BELL Q");
+        drawCurveGlyph (g, 267.0f, 330.0f, 1, silkCol);
+        drawCurveGlyph (g, 309.0f, 330.0f, 0, silkCol);
+        drawDialRingAndLabels (g, kLmfFreq, {}, "LMF Hz");
+
+        // EQ LF Card
         drawDialRingAndLabels (g, kLfGain,  {}, "LF dB");
         drawDialRingAndLabels (g, kLfFreq,  {}, "LF Hz");
-        drawIndicatorLed (g, 228.0f, 401.0f, 7.2f, kLedAmber, bLfBell.getToggleState());
+        drawIndicatorLed (g, 248.0f, 481.0f, 7.0f, kLedAmber, bLfBell.getToggleState());
 
-        // Equaliser bottom switches & LEDs
-        drawIndicatorLed (g, 232.0f, 492.0f, 7.5f, kFLAccentCyan, bEqIn.getToggleState());
-        drawIndicatorLed (g, 288.0f, 492.0f, 7.5f, kLedRed,       bEqSc.getToggleState());
-        drawIndicatorLed (g, 344.0f, 492.0f, 7.5f, kLedAmber,     bEqPre.getToggleState());
+        drawIndicatorLed (g, 230.0f, 546.0f, 7.5f, kFLAccentCyan, bEqIn.getToggleState());
+        drawIndicatorLed (g, 288.0f, 546.0f, 7.5f, kLedRed,       bEqSc.getToggleState());
+        drawIndicatorLed (g, 346.0f, 546.0f, 7.5f, kLedAmber,     bEqPre.getToggleState());
 
         // DE-ESS Section (2 Knobs: FREQ & THRESH + SSL format SPLIT BAND button & GR LED)
         drawDialRingAndLabels (g, kDsFreq, {}, "FREQ Hz");
         drawDialRingAndLabels (g, kDsThr,  {}, "THRESH dB");
         const float dsGr = telemetry.deEssReductionDb.load (std::memory_order_relaxed);
-        drawIndicatorLed (g, 288.0f, 646.0f, 7.8f,
+        drawIndicatorLed (g, 288.0f, 682.0f, 7.8f,
                           dsGr > 0.2f ? kLedRed : kFLAccentCyan, bDeEss.getToggleState());
 
         // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser!
@@ -1021,39 +1048,21 @@ private:
         drawDialRingAndLabels (g, kSideDb, {}, "SIDE dB");
 
         // =====================================================================
-        // COLUMN 3: HEADER (CHANNELSTRIP + PAPIELGUAPO SIGNATURE),
-        //           INFLATE (ABOVE FADER), AND MASTER FADER + DUAL L/R GENERAL METER
+        // COLUMN 3: INFLATE (ABOVE FADER), MASTER FADER + DUAL L/R GENERAL METER,
+        //           AND CHANNELSTRIP + PAPIELGUAPO SIGNATURE BELOW THE SLIDER!
         // =====================================================================
-        g.setColour (kFLTextBright);
-        g.setFont (getFLFont (16.5f, true));
-        g.drawText ("CHANNELSTRIP", 388, 12, 148, 22, Justification::centred);
-
-        {
-            const Rectangle<float> heatBadge (438.0f, 36.0f, 48.0f, 16.0f);
-            g.setColour (Colour (0xff141619));
-            g.fillRoundedRectangle (heatBadge, 3.0f);
-            g.setColour (kFLAccentOrange.withAlpha (0.7f));
-            g.drawRoundedRectangle (heatBadge, 3.0f, 1.0f);
-            g.setColour (kFLAccentOrange);
-            g.setFont (getFLFont (9.0f, true));
-            g.drawText ("FL HEAT", heatBadge, Justification::centred);
-        }
-
-        // Exact papielguapo signature from OUTPUT
-        drawPapielguapoSignature (g, Rectangle<float> (404.0f, 60.0f, 116.0f, 48.0f), kFLTextBright);
-
         // INFLATE Section (ABOVE MASTER FADER: 2 Knobs INFLATE & CURVE + CLIP 0 dB Button)
         drawDialRingAndLabels (g, kInfEff, {}, "INFLATE %");
         drawDialRingAndLabels (g, kInfCrv, {}, "CURVE");
-        drawIndicatorLed (g, 410.0f, 257.0f, 7.5f, kLedRed, bClip0.getToggleState());
+        drawIndicatorLed (g, 420.0f, 131.0f, 7.5f, kLedRed, bClip0.getToggleState());
 
         // =====================================================================
         // DUAL L / R GENERAL LED METER BESIDE THE MASTER FADER
         // =====================================================================
         g.setColour (showPreHeatInputMeter ? kFLAccentCyan : kFLAccentOrange);
-        g.setFont (getFLFont (8.2f, true));
-        g.drawText ("L", 418, 356, 14, 11, Justification::centred);
-        g.drawText ("R", 436, 356, 14, 11, Justification::centred);
+        g.setFont (getFLFont (9.5f, true));
+        g.drawText ("L", 418, 227, 14, 12, Justification::centred);
+        g.drawText ("R", 436, 227, 14, 12, Justification::centred);
 
         constexpr int kNumMeterRows = 12;
         constexpr const char* mLabelsPeak[kNumMeterRows] = {
@@ -1072,14 +1081,14 @@ private:
 
         for (int i = 0; i < kNumMeterRows; ++i)
         {
-            const float my = 382.0f + i * 34.0f;
+            const float my = 254.0f + i * 34.0f;
             const char* lbl = useCalibratedRms18 ? mLabelsVu[i] : mLabelsPeak[i];
             const float thr = useCalibratedRms18 ? mThreshVu[i] : mThreshPeak[i];
             const bool isZeroVuRow = (useCalibratedRms18 && i == 3);
 
             g.setColour (isZeroVuRow ? kFLAccentOrange : kFLTextBright);
-            g.setFont (getFLFont (7.8f, true));
-            g.drawText (lbl, 388, roundToInt (my - 5.0f), 26, 10, Justification::centredRight);
+            g.setFont (getFLFont (8.8f, true));
+            g.drawText (lbl, 386, roundToInt (my - 5.5f), 28, 11, Justification::centredRight);
 
             const Colour ledCol = (i == 0) ? kLedRed
                                 : (i <= 2) ? kLedAmber
@@ -1092,7 +1101,7 @@ private:
 
         // Dual L / R Numeric Readout Box at bottom of General Meter
         {
-            const Rectangle<float> digBox (390.0f, 804.0f, 68.0f, 34.0f);
+            const Rectangle<float> digBox (390.0f, 676.0f, 68.0f, 36.0f);
             g.setColour (Colour (0xff121417));
             g.fillRoundedRectangle (digBox, 3.5f);
             g.setColour (useCalibratedRms18 ? kFLAccentOrange.withAlpha (0.75f) : Colour (0xff2c3136));
@@ -1105,18 +1114,18 @@ private:
             };
 
             g.setColour (useCalibratedRms18 ? kFLAccentOrange : kFLTextBright);
-            g.setFont (getFLFont (8.2f, true));
+            g.setFont (getFLFont (9.0f, true));
             g.drawText ("L: " + fmtDb (meterDbL) + (useCalibratedRms18 ? " VU" : " dB"),
-                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 2.0f, digBox.getWidth() - 6.0f, 14.0f),
+                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 2.0f, digBox.getWidth() - 6.0f, 15.0f),
                         Justification::centredLeft, false);
             g.drawText ("R: " + fmtDb (meterDbR) + (useCalibratedRms18 ? " VU" : " dB"),
-                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 17.0f, digBox.getWidth() - 6.0f, 14.0f),
+                        Rectangle<float> (digBox.getX() + 3.0f, digBox.getY() + 18.0f, digBox.getWidth() - 6.0f, 15.0f),
                         Justification::centredLeft, false);
 
             g.setColour (kFLTextMuted);
-            g.setFont (getFLFont (7.5f, true));
+            g.setFont (getFLFont (8.2f, true));
             g.drawText (showPreHeatInputMeter ? "PRE-HEAT IN" : "POST-FADER OUT",
-                        Rectangle<float> (388.0f, 842.0f, 72.0f, 12.0f), Justification::centred, false);
+                        Rectangle<float> (388.0f, 716.0f, 72.0f, 12.0f), Justification::centred, false);
         }
 
         // Console Fader dB Scale (10, 5, 0, 5, 10, 20, 30, 40, 50, inf)
@@ -1130,7 +1139,7 @@ private:
         const float fTop = static_cast<float> (fader.getY()) + 18.0f;
         const float fBot = static_cast<float> (fader.getBottom()) - 18.0f;
         g.setColour (kFLTextBright);
-        g.setFont (getFLFont (9.5f, true));
+        g.setFont (getFLFont (10.5f, true));
         for (const auto& fm : fMarks)
         {
             const float prop = static_cast<float> (fader.valueToProportionOfLength (fm.db));
@@ -1139,8 +1148,20 @@ private:
         }
 
         g.setColour (kFLTextBright);
+        g.setFont (getFLFont (10.2f, true));
+        g.drawText ("MASTER OUT", 448, 764, 86, 14, Justification::centred);
+
+        // CHANNELSTRIP + PAPIELGUAPO SIGNATURE Card BELOW the Master Out slider! (Double-click changes Oversampling)
+        const int osIdx = (state.getRawParameterValue ("oversampling") != nullptr)
+                        ? roundToInt (state.getRawParameterValue ("oversampling")->load()) : 0;
+        constexpr const char* osNames[4] = { "OS: 1x", "OS: 2x", "OS: 4x", "OS: 8x" };
+        g.setColour (kFLTextBright);
+        g.setFont (getFLFont (16.5f, true));
+        g.drawText ("CHANNELSTRIP", 388, 798, 148, 22, Justification::centred);
+        drawPapielguapoSignature (g, Rectangle<float> (400.0f, 824.0f, 124.0f, 56.0f), kFLTextBright);
+        g.setColour (osIdx > 0 ? kFLAccentCyan : kFLTextMuted);
         g.setFont (getFLFont (9.2f, true));
-        g.drawText ("MASTER OUT", 450, 892, 82, 14, Justification::centred);
+        g.drawText (String (osNames[std::clamp (osIdx, 0, 3)]) + " (2x CLICK)", 388, 886, 148, 14, Justification::centred);
     }
 
     AudioProcessor& proc;
@@ -1156,6 +1177,7 @@ private:
     ConsoleDial kHpf, kLpf;
     ConsoleDial kHfGain, kHfFreq;
     ConsoleDial kMidGain, kMidQ, kMidFreq;
+    ConsoleDial kLmfGain, kLmfQ, kLmfFreq;
     ConsoleDial kLfGain, kLfFreq;
     ConsoleDial kDsFreq, kDsThr;
     ConsoleDial kInfEff, kInfCrv;
@@ -1203,6 +1225,7 @@ void renderSurcoEditorSnapshot (const File& outPng)
         if (nm == "Inflate Curve")   p->setValueNotifyingHost (0.65f);
         if (nm == "High shelf gain") p->setValueNotifyingHost (0.68f);
         if (nm == "High mid gain")   p->setValueNotifyingHost (0.61f);
+        if (nm == "Low mid gain")    p->setValueNotifyingHost (0.39f);
         if (nm == "Low shelf gain")  p->setValueNotifyingHost (0.58f);
         if (nm == "De-Ess")          p->setValueNotifyingHost (1.0f);
         if (nm == "Clip 0 dB")       p->setValueNotifyingHost (1.0f);

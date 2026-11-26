@@ -15,7 +15,8 @@ enum Param {
     gateRange, gateAttack, gateRelease, extSidechain, fader, preampMode, eqMode, deEss,
     phaseInv, pad20, hfBell, lfBell, eqIn, eqPreDyn, eqDynSc, dynIn, expIn, cmpIn,
     fltDynSc, fltPreDyn, filterSlope, dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor,
-    heatDrive, heatTone, heatBypass, midGain, sideGain, inflateEffect, inflateCurve, inflateClip, count
+    heatDrive, heatTone, heatBypass, midGain, sideGain, inflateEffect, inflateCurve, inflateClip,
+    oversampling, count
 };
 
 constexpr const char* ids[] = {
@@ -25,7 +26,8 @@ constexpr const char* ids[] = {
     "gateRange","gateAttack","gateRelease","extSidechain","fader","preampMode","eqMode","deEss",
     "phaseInv","pad20","hfBell","lfBell","eqIn","eqPreDyn","eqDynSc","dynIn","expIn","cmpIn",
     "fltDynSc","fltPreDyn","filterSlope","dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor",
-    "heatDrive","heatTone","heatBypass","midGain","sideGain","inflateEffect","inflateCurve","inflateClip"
+    "heatDrive","heatTone","heatBypass","midGain","sideGain","inflateEffect","inflateCurve","inflateClip",
+    "oversampling"
 };
 static_assert (std::size (ids) == count);
 
@@ -117,6 +119,7 @@ State::ParameterLayout layout()
     add (inflateEffect, "Inflate Effect", 0.0f, 100.0f, 0.0f, "%");
     add (inflateCurve,  "Inflate Curve", -50.0f, 50.0f, 0.0f, "");
     flag (inflateClip,  "Clip 0 dB", false);
+    choice (oversampling, "Oversampling", { "1x Native", "2x OS", "4x OS", "8x OS" }, 0);
 
     return result;
 }
@@ -504,11 +507,12 @@ public:
         const float blockRmsInL = numSamples > 0 ? static_cast<float>(std::sqrt(sumSqInL / numSamples)) : 0.0f;
         const float blockRmsInR = numSamples > 0 ? static_cast<float>(std::sqrt(sumSqInR / numSamples)) : 0.0f;
 
-        // 1. Run exact 1:1 FL HEAT (Ocelot LUT + Drive/Tone) at the input stage when active
+        // 1. Run exact 1:1 FL HEAT (Ocelot LUT + Drive/Tone + selectable 1x/2x/4x/8x Oversampling) at the input stage when active
         const float hDrive = v[heatDrive];
         const float hTone  = v[heatTone];
         const bool  hByp   = v[heatBypass] > 0.5f;
-        flHeatDsp.setParameters(hDrive, hTone, hByp, flheat::HeatDSP::kOS_1x_NativePT);
+        const int   osMode = juce::jlimit(0, 3, int(v[oversampling]));
+        flHeatDsp.setParameters(hDrive, hTone, hByp, osMode);
         if (!hByp && std::abs(hDrive) > 0.001f)
             flHeatDsp.processBlock(main);
 
@@ -540,7 +544,7 @@ public:
         auto musicalBellQ = [brownEQ](double userQ, double gainDb) noexcept -> double
         {
             const double absG = std::abs(gainDb);
-            const double propFactor = brownEQ ? (0.58 + 0.032 * absG) : (0.76 + 0.024 * absG);
+            const double propFactor = brownEQ ? (0.48 + 0.015 * absG) : (0.85 + 0.032 * absG);
             return std::clamp(userQ * propFactor, 0.25, 10.0);
         };
         const double shelfSlope = brownEQ ? 0.58 : 0.90;
