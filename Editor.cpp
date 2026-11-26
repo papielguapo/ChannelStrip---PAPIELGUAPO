@@ -188,9 +188,14 @@ class FLHeatLookAndFeel final : public LookAndFeel_V4
 public:
     FLHeatLookAndFeel()
     {
-        setColour (Slider::textBoxTextColourId, Colours::white);
-        setColour (Slider::textBoxBackgroundColourId, Colour (0xff14171a));
-        setColour (Slider::textBoxOutlineColourId, kFLAccentOrange);
+        // Keep rotary slider text boxes 100% invisible when not actively typing!
+        setColour (Slider::textBoxTextColourId, Colours::transparentBlack);
+        setColour (Slider::textBoxBackgroundColourId, Colours::transparentBlack);
+        setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
+        setColour (TextEditor::textColourId, Colours::white);
+        setColour (TextEditor::backgroundColourId, Colour (0xff121417));
+        setColour (TextEditor::outlineColourId, kFLAccentOrange);
+        setColour (TextEditor::focusedOutlineColourId, kFLAccentOrange);
     }
 
     Slider::SliderLayout getSliderLayout (Slider& slider) override
@@ -216,10 +221,21 @@ public:
             l->setColour (Label::textWhenEditingColourId, Colours::white);
             l->setColour (Label::backgroundWhenEditingColourId, Colour (0xff121417));
             l->setColour (Label::outlineWhenEditingColourId, kFLAccentOrange);
+            l->setColour (TextEditor::textColourId, Colours::white);
+            l->setColour (TextEditor::backgroundColourId, Colour (0xff121417));
+            l->setColour (TextEditor::outlineColourId, kFLAccentOrange);
+            l->setColour (TextEditor::focusedOutlineColourId, kFLAccentOrange);
             l->setFont (getFLFont (10.0f, true));
             l->setInterceptsMouseClicks (false, false);
         }
         return l;
+    }
+
+    void drawLabel (Graphics& g, Label& label) override
+    {
+        if (dynamic_cast<Slider*> (label.getParentComponent()) != nullptr && !label.isBeingEdited())
+            return;
+        LookAndFeel_V4::drawLabel (g, label);
     }
 
     void drawRotarySlider (Graphics& g, int x, int y, int width, int height,
@@ -506,7 +522,7 @@ public:
 
         // FL HEAT section buttons
         setupParamBtn  (bHeatByp, "HEAT BYPASS",   "RedBtn",   "heatBypass");
-        setupParamBtn  (bPhase,   "FASE 180°",     "RedBtn",   "phaseInv");
+        setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
         setupParamBtn  (bPad,     "PAD -20 dB",    "AmberBtn", "pad20");
 
         // Dynamics buttons
