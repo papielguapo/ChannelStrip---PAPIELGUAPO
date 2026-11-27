@@ -903,10 +903,12 @@ public:
         setupKnob (kCompRat,   "compRatio",     "SSLYellow");
         setupKnob (kCompThr,   "compThreshold", "SSLBlue");
         setupKnob (kCompRel,   "compRelease",   "SSLYellow");
+        setupKnob (kCompKnee,  "compKnee",      "SSLBlue");
 
         // 3. GATE / EXPANDER: alternating Blue & Yellow
         setupKnob (kExpThr,    "gateThreshold", "SSLBlue");
-        setupKnob (kExpRng,    "gateRange",     "SSLYellow");
+        setupKnob (kExpRng,    "gateGain",      "SSLYellow");
+        kExpRng.setTooltip ("Closed gate gain: 100% passes everything; 0% silences noise below threshold.");
         setupKnob (kExpRel,    "gateRelease",   "SSLBlue");
 
         // 4. FILTERS: HP & LP (2 knobs Hz + 2 stepped knobs from 0 dB to Brickwall!)
@@ -1165,11 +1167,13 @@ private:
         kOddHarm.setBounds   (96, 114, knobSz, knobSz);
 
         // COMPRESSOR Card (y = 198..422)
-        kCompRat.setBounds (22, 228, knobSz, knobSz);
+        constexpr int compKnobSz = 40;
+        kCompRat.setBounds (22, 228, compKnobSz, compKnobSz);
         bLink.setBounds    (118, 234, btnW, btnH);
-        kCompThr.setBounds (114, 300, knobSz, knobSz);
+        kCompThr.setBounds (114, 286, compKnobSz, compKnobSz);
         bAutoMakeup.setBounds (118, 260, btnW, btnH);
-        kCompRel.setBounds (22, 328, knobSz, knobSz);
+        kCompKnee.setBounds (22, 314, compKnobSz, compKnobSz);
+        kCompRel.setBounds (114, 354, compKnobSz, compKnobSz);
 
         // GATE / EXPAND Card (y = 427..712)
         kExpThr.setBounds  (112, 450, knobSz, knobSz);
@@ -1419,16 +1423,17 @@ private:
         drawDialRingAndLabels (g, kCompRat, {}, ratLabel);
         drawDialRingAndLabels (g, kCompThr, {}, "THRESHOLD");
         drawDialRingAndLabels (g, kCompRel, {}, "RELEASE");
+        drawDialRingAndLabels (g, kCompKnee, {}, "KNEE");
 
         // Fixed Ultra-Fast Attack indicator (FAST ATK) for Compressor
-        drawIndicatorLed (g, 92.0f, 396.0f, 6.8f, kLedRed, true);
+        drawIndicatorLed (g, 20.0f, 398.0f, 6.8f, kLedRed, true);
         g.setColour (silkCol);
         g.setFont (getFLFont (8.2f, true));
-        g.drawText ("FAST ATK", 102, 390, 62, 12, Justification::centredLeft);
+        g.drawText ("FAST ATK", 30, 392, 62, 12, Justification::centredLeft);
 
         // GATE / EXPANDER Card
         drawDialRingAndLabels (g, kExpThr, {}, "THRESHOLD");
-        drawDialRingAndLabels (g, kExpRng, {}, "RANGE");
+        drawDialRingAndLabels (g, kExpRng, {}, "GAIN");
         drawDialRingAndLabels (g, kExpRel, {}, "RELEASE");
 
         // Fixed Ultra-Fast Attack indicator (FAST ATK) for Gate
@@ -1654,7 +1659,7 @@ private:
     CanvasComponent canvas { *this };
 
     ConsoleDial kInputGain, kHeatDrive, kHeatTone, kEvenHarm, kOddHarm;
-    ConsoleDial kCompRat, kCompThr, kCompRel;
+    ConsoleDial kCompRat, kCompThr, kCompRel, kCompKnee;
     ConsoleDial kExpThr, kExpRng, kExpRel;
     ConsoleDial kHpf, kLpf, kHpSlope, kLpSlope;
     ConsoleDial kHfGain, kHfFreq;

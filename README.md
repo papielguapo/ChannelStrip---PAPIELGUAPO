@@ -1,5 +1,21 @@
 # ChannelStrip — papielguapo (VST3 Windows x64)
 
+## Correcciones de dinámica e INFLATE
+
+- INFLATE mantiene intacta la rama seca y mezcla el efecto de forma continua desde 0 %, también con picos internos superiores a +6 dBFS. CLIP sigue siendo una opción independiente. Es un waveshaper derivado de OUTPUT; no se afirma equivalencia exacta con Sonnox Oxford Inflator.
+- El de-esser SPLIT utiliza bandas complementarias: sin reducción, la salida coincide con la entrada y no hay anulación en la frecuencia de cruce. Detector de amplitud estéreo enlazado, reducción suavizada y bypass con transición breve.
+- GAIN sustituye a RANGE en el gate: 100 % no atenúa; 50 % deja pasar la mitad de amplitud cuando cierra; 0 % reduce hasta -120 dB. Detector con envolvente, histéresis de 3 dB y hold de 3 ms para evitar cierres entre ciclos. RELEASE controla el cierre; la apertura sigue siendo rápida.
+- KNEE del compresor: 0 a 24 dB, de rodilla dura a suave, para detectores Peak y RMS. Mantiene ataque de 0,1 ms. Es una implementación de rodilla suave convencional, no una copia exacta del DSP de Fruity Limiter.
+- Al cargar estados antiguos se convierte RANGE a GAIN y se conserva la rodilla fija de 6 dB del antiguo detector RMS.
+
+Pruebas adicionales:
+
+```powershell
+python tests/test_inflate_deesser.py
+python tests/test_gate.py
+python tests/test_knee.py
+```
+
 ## Actualización 2026-11-27
 
 Esta versión continúa la rama `papielguapo-mono-btn-and-input-led`, conserva su skin metálica vectorial y el botón MONO. El botón de inversión de polaridad se identifica como **Ø**.

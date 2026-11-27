@@ -18,7 +18,7 @@ enum Param {
     dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor, dsPrePost,
     heatDrive, heatTone, heatBypass, evenHarmonics, oddHarmonics, midGain, sideGain,
     inflateEffect, inflateCurve, inflateClip, oversampling, analogNoise,
-    meterInOutParam, meterScaleParam, autoMakeup, stereoCreate, stereoSeparation, stereoWidth, count
+    meterInOutParam, meterScaleParam, autoMakeup, stereoCreate, stereoSeparation, stereoWidth, gateGain, compKnee, count
 };
 
 constexpr const char* ids[] = {
@@ -31,7 +31,7 @@ constexpr const char* ids[] = {
     "dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor","dsPrePost",
     "heatDrive","heatTone","heatBypass","evenHarmonics","oddHarmonics","midGain","sideGain",
     "inflateEffect","inflateCurve","inflateClip","oversampling","analogNoise",
-    "meterInOut","meterScale","autoMakeup","stereoCreate","stereoSeparation","stereoWidth"
+    "meterInOut","meterScale","autoMakeup","stereoCreate","stereoSeparation","stereoWidth","gateGain","compKnee"
 };
 static_assert (std::size (ids) == count);
 
@@ -138,6 +138,8 @@ State::ParameterLayout layout()
     flag (stereoCreate, "Stereo Create (legacy, inactive)", false);
     add (stereoSeparation, "Stereo Separation (legacy, inactive)", -100, 100, 0, "%");
     add (stereoWidth, "Stereo Width", 0, 200, 100, "%");
+    add (gateGain, "Gate Gain", 0, 100, 100, "%");
+    add (compKnee, "Compressor Knee", 0, 24, 0, "dB");
 
     return result;
 }
@@ -329,6 +331,16 @@ struct VocalsDeEsser
             a2 = (1.0f - alpha) / a0;
         }
 
+        // First-order complementary split: dry = low + high exactly.
+        void setSplitHighPass(double sr, float freq) noexcept
+        {
+            const double k = std::tan(juce::MathConstants<double>::pi
+                * std::clamp(double(freq), 20.0, sr * 0.48) / sr);
+            b0 = static_cast<float>(1.0 / (1.0 + k));
+            b1 = -b0; b2 = 0.0f;
+            a1 = static_cast<float>((k - 1.0) / (k + 1.0)); a2 = 0.0f;
+        }
+
         inline float processL(float x) noexcept
         {
             const float y = b0 * x + z1L;
@@ -351,10 +363,9 @@ struct VocalsDeEsser
     int lastScType = -1;
 
     Biquad scFilterL, scFilterR;
-    Biquad splitLowL, splitLowR;
     Biquad splitHighL, splitHighR;
 
-    float envDb = -96.0f;
+    float envelope = 0.0f;
     float currentAttenDb = 0.0f;
     float scDetectorDb = -96.0f;
 
@@ -375,11 +386,9 @@ struct VocalsDeEsser
         lastScType = -1;
         scFilterL.reset();
         scFilterR.reset();
-        splitLowL.reset();
-        splitLowR.reset();
         splitHighL.reset();
         splitHighR.reset();
-        envDb = -96.0f;
+        envelope = 0.0f;
         currentAttenDb = 0.0f;
         scDetectorDb = -96.0f;
     }
@@ -403,10 +412,8 @@ struct VocalsDeEsser
             scFilterR.setBandPass(sampleRate, freqHz, 2.0f);
         }
 
-        splitLowL.setLowPass(sampleRate, freqHz, 0.7071f);
-        splitLowR.setLowPass(sampleRate, freqHz, 0.7071f);
-        splitHighL.setHighPass(sampleRate, freqHz, 0.7071f);
-        splitHighR.setHighPass(sampleRate, freqHz, 0.7071f);
+        splitHighL.setSplitHighPass(sampleRate, freqHz);
+        splitHighR.setSplitHighPass(sampleRate, freqHz);
     }
 
     void processSample(double& left, double& right,
@@ -425,29 +432,33 @@ struct VocalsDeEsser
         const float scR = scFilterR.processR(rF);
         const float scPeak = std::max(std::abs(scL), std::abs(scR));
         scDetectorDb = gainToDb(scPeak);
-
-        if (!enabled)
-        {
-            currentAttenDb = 0.0f;
-            return;
-        }
+        const float highL = splitHighL.processL(lF);
+        const float highR = splitHighR.processR(rF);
 
         const float attCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.0005f));
         const float relCoeff = std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.0320f));
-        const float coeff = (scDetectorDb > envDb) ? attCoeff : relCoeff;
-        envDb = coeff * envDb + (1.0f - coeff) * scDetectorDb;
+        // Smooth magnitude before converting to dB; sine-wave zero crossings must
+        // not drag a logarithmic envelope down toward minus infinity.
+        const float coeff = (scPeak > envelope) ? attCoeff : relCoeff;
+        envelope = coeff * envelope + (1.0f - coeff) * scPeak;
+        const float envDb = gainToDb(envelope);
 
         float grDb = 0.0f;
-        if (envDb > threshDb)
+        if (enabled && envDb > threshDb)
         {
             const float over = envDb - threshDb;
             grDb = -std::min(24.0f, over * 0.8571428f);
         }
 
-        currentAttenDb = -grDb;
-        const float grLin = dbToGain(grDb);
+        const float targetAttenDb = -grDb;
+        const float gainCoeff = !enabled
+            ? std::exp(-1.0f / (static_cast<float>(sampleRate) * 0.005f))
+            : (targetAttenDb > currentAttenDb ? attCoeff : relCoeff);
+        currentAttenDb = targetAttenDb + gainCoeff * (currentAttenDb - targetAttenDb);
+        if (currentAttenDb < 0.00001f) currentAttenDb = 0.0f;
+        const float grLin = dbToGain(-currentAttenDb);
 
-        if (monitorSc)
+        if (monitorSc && enabled)
         {
             left = static_cast<double>(scL);
             right = static_cast<double>(scR);
@@ -456,12 +467,8 @@ struct VocalsDeEsser
 
         if (audioMode == 0)
         {
-            const float lowL = splitLowL.processL(lF);
-            const float lowR = splitLowR.processR(rF);
-            const float highL = splitHighL.processL(lF) * grLin;
-            const float highR = splitHighR.processR(rF) * grLin;
-            left = static_cast<double>(lowL + highL);
-            right = static_cast<double>(lowR + highR);
+            left += static_cast<double>(highL) * (double(grLin) - 1.0);
+            right += static_cast<double>(highR) * (double(grLin) - 1.0);
         }
         else
         {
@@ -472,7 +479,7 @@ struct VocalsDeEsser
 };
 
 // =========================================================================
-// Exact Inflator DSP from OUTPUT (Phobos67Processor::inflateCore & clip)
+// OUTPUT-derived waveshaper with continuous dry/wet blending at all input levels.
 // =========================================================================
 struct OutputInflator
 {
@@ -490,9 +497,10 @@ struct OutputInflator
 
     static double inflateCore (double z, double c, double e) noexcept
     {
-        z = juce::jlimit (-1.9999998, 1.9999998, z);
         if (e == 0.0) return z;
-        const double a = std::abs (z);
+        // Bound only the nonlinear branch. Clamping the dry signal here made
+        // the first nonzero Effect value abruptly clip signals above +6 dBFS.
+        const double a = std::min(std::abs(z), 1.9999998);
         const double y = a <= 1.0
             ? a * ((1.0 + c) + a * ((0.75 - 1.5 * c - 0.25 * c * c) + a * ((-0.5 + 0.5 * c * c) + a * (-0.25 * (1.0 - c) * (1.0 - c)))))
             : 1.0 - (a - 1.0) * (a - 1.0);
@@ -501,8 +509,8 @@ struct OutputInflator
 
     inline double processSample (double x, double c, double e, bool clip0dB) noexcept
     {
-        const double z = juce::jlimit (clip0dB ? -1.0 : -1.9999998, clip0dB ? 1.0 : 1.9999998, x);
-        const double y = (e > 0.000001) ? inflateCore (z, c, e) : z;
+        const double z = clip0dB ? juce::jlimit (-1.0, 1.0, x) : x;
+        const double y = (e > 0.0) ? inflateCore (z, c, e) : z;
         return clip0dB ? juce::jlimit (-1.0, 1.0, y) : y;
     }
 };
@@ -616,6 +624,7 @@ public:
         filters={}; scFilters={}; hpSlope.clear(); lpSlope.clear(); scHpSlope.clear(); scLpSlope.clear();
         flHeatDsp.reset();
         lastModel=-1; reduction=attenuation=power=0;
+        gateEnvelope=0; gateOpen=false; gateHoldRemaining=0;
         vocalsDeEsser.prepare(fs);
         inflator.prepare(fs);
     }
@@ -775,7 +784,11 @@ public:
         const auto rms = std::exp(pole1000 / 10.0);
         const bool dynActive = v[dynIn]>0.5f;
         const bool cmpActive = dynActive && v[cmpIn]>0.5f && (v[compRatio] > 1.001f);
-        const bool expActive = dynActive && v[expIn]>0.5f && (v[gateRange] > 0.01f);
+        const double gateDepthDb = v[gateGain] <= 0.0f ? 120.0
+            : -juce::Decibels::gainToDecibels(double(v[gateGain]) * 0.01, -120.0);
+        const bool expActive = dynActive && v[expIn]>0.5f && gateDepthDb > 0.001;
+        const double gateDetectorRelease = std::exp(-1.0 / (fs * 0.015));
+        const int gateHoldLength = std::max(1, int(fs * 0.003));
         const bool dynNeedsDetector = cmpActive || expActive;
         // At 20:0 (compRatio >= 19.95), full limiting slope (1.0); from 1:1 to <20:0, standard ratio 1 - 1/R
         const double compRatioInv = (v[compRatio] >= 19.95f) ? 1.0 : (1.0 - 1.0 / double(v[compRatio]));
@@ -784,7 +797,8 @@ public:
         autoMakeupDb.setTargetValue(v[autoMakeup] > 0.5f && cmpActive
             ? std::clamp(-double(v[compThreshold]) * compRatioInv * 0.5, 0.0, 18.0)
             : 0.0);
-        const double compThrLin   = juce::Decibels::decibelsToGain(double(v[compThreshold]), -160.0);
+        const double kneeWidthDb = v[compKnee];
+        const double compKneeStartLin = gain(double(v[compThreshold]) - kneeWidthDb * 0.5);
         const double gateThrLin   = juce::Decibels::decibelsToGain(double(v[gateThreshold]), -160.0);
         const float dsF = v[dsFreq];
         const float dsT = v[dsThresh];
@@ -842,10 +856,8 @@ public:
             if (channels == 1) x[1] = x[0];
 
             // PRE DYN ON: De-Esser runs right after FL HEAT and BEFORE Filters, EQ and Compressor!
-            if (deEssActive && dsPre)
-                vocalsDeEsser.processSample(x[0], x[1], dsF, dsT, dsSc, dsMode, dsMon, true);
-            else if (!deEssActive)
-                vocalsDeEsser.currentAttenDb = 0.0f;
+            if (dsPre)
+                vocalsDeEsser.processSample(x[0], x[1], dsF, dsT, dsSc, dsMode, dsMon, deEssActive);
 
             for (int ch=0;ch<channels;++ch)
             {
@@ -883,23 +895,32 @@ public:
                     peak=std::max(peak,std::abs(det));
                 }
                 power=rms*power+(1-rms)*peak*peak;
+                gateEnvelope = peak + (peak > gateEnvelope ? ga : gateDetectorRelease) * (gateEnvelope - peak);
                 double target = 0.0;
                 double gate   = 0.0;
-                if ((cmpActive && (rmsDetector ? (power > compThrLin * compThrLin * 0.25) : (peak > compThrLin)))
-                    || (expActive && peak < gateThrLin))
+                if (cmpActive && (rmsDetector ? (power > compKneeStartLin * compKneeStartLin) : (peak > compKneeStartLin)))
                 {
                     const double level = juce::Decibels::gainToDecibels(peak,-160.0);
                     if (cmpActive)
                     {
                         double over=(rmsDetector ? juce::Decibels::gainToDecibels(std::sqrt(power),-160.0) : level)-v[compThreshold];
-                        if (rmsDetector && over>-3 && over<3) over=(over+3)*(over+3)/12;
+                        if (kneeWidthDb > 0.0001 && over > -kneeWidthDb * 0.5 && over < kneeWidthDb * 0.5)
+                            over = (over + kneeWidthDb * 0.5) * (over + kneeWidthDb * 0.5) / (2.0 * kneeWidthDb);
                         else over=std::max(0.0,over);
                         target = over * compRatioInv;
                     }
-                    if (expActive && level < v[gateThreshold])
-                    {
-                        gate = (v[gateMode]<0.5f) ? double(v[gateRange]) : std::min(double(v[gateRange]), v[gateThreshold]-level);
-                    }
+                }
+                if (expActive)
+                {
+                    if (gateEnvelope >= gateThrLin)
+                    { gateOpen=true; gateHoldRemaining=gateHoldLength; }
+                    else if (gateHoldRemaining > 0)
+                        --gateHoldRemaining;
+                    else if (gateEnvelope < gateThrLin * 0.707945784)
+                        gateOpen=false;
+                    const double gateLevelDb = juce::Decibels::gainToDecibels(gateEnvelope, -160.0);
+                    gate = v[gateMode] < 0.5f ? (gateOpen ? 0.0 : gateDepthDb)
+                        : std::min(gateDepthDb, std::max(0.0, double(v[gateThreshold]) - gateLevelDb));
                 }
                 reduction=target+(target>reduction ? ca : cr)*(reduction-target);
                 attenuation=gate+(gate<attenuation ? ga : gr)*(attenuation-gate);
@@ -929,8 +950,8 @@ public:
             if (channels == 1) outCh[1] = outCh[0];
 
             // PRE DYN OFF (Post): De-Esser runs after Comp/EQ and RIGHT BEFORE OUTPUT Sculp Mid/Side!
-            if (deEssActive && !dsPre)
-                vocalsDeEsser.processSample(outCh[0], outCh[1], dsF, dsT, dsSc, dsMode, dsMon, true);
+            if (!dsPre)
+                vocalsDeEsser.processSample(outCh[0], outCh[1], dsF, dsT, dsSc, dsMode, dsMon, deEssActive);
 
             // 1:1 OUTPUT Sculp Mid/Side Matrix:
             // float mid=(l+r)*.5f*v[3], side=(l-r)*.5f*v[4]; l=mid+side; r=mid-side;
@@ -950,8 +971,7 @@ public:
             for (int ch=0;ch<channels;++ch)
             {
                 double y = outCh[ch];
-                if (targetInfEffect > 0.0001 || inflator.effectCurrent > 0.0001 || clip0dB)
-                    y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
+                y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
                 // Master Fader Out is the VERY LAST stage before the OUT meter!
                 y *= faderGain;
                 const float absY = float(std::abs(y));
@@ -995,7 +1015,31 @@ public:
     void getStateInformation(juce::MemoryBlock& b) override
     { if(auto xml=state.copyState().createXml()) copyXmlToBinary(*xml,b); }
     void setStateInformation(const void* data,int bytes) override
-    { if(auto xml=getXmlFromBinary(data,bytes)) if(xml->hasTagName(state.state.getType()) || xml->hasTagName("SurcoE")) state.replaceState(juce::ValueTree::fromXml(*xml)); }
+    {
+        if (auto xml=getXmlFromBinary(data,bytes))
+            if (xml->hasTagName(state.state.getType()) || xml->hasTagName("SurcoE"))
+            {
+                auto restored=juce::ValueTree::fromXml(*xml);
+                if (!restored.getChildWithProperty("id", "gateGain").isValid())
+                {
+                    const auto oldRange=restored.getChildWithProperty("id", "gateRange");
+                    juce::ValueTree migrated("PARAM");
+                    migrated.setProperty("id", "gateGain", nullptr);
+                    migrated.setProperty("value", oldRange.isValid()
+                        ? 100.0 * gain(-double(oldRange.getProperty("value"))) : 100.0, nullptr);
+                    restored.addChild(migrated, -1, nullptr);
+                }
+                if (!restored.getChildWithProperty("id", "compKnee").isValid())
+                {
+                    const auto oldDetector=restored.getChildWithProperty("id", "compMode");
+                    juce::ValueTree migrated("PARAM");
+                    migrated.setProperty("id", "compKnee", nullptr);
+                    migrated.setProperty("value", double(oldDetector.getProperty("value")) > 0.5 ? 6.0 : 0.0, nullptr);
+                    restored.addChild(migrated, -1, nullptr);
+                }
+                state.replaceState(restored);
+            }
+    }
     SurcoTelemetry& getTelemetry() noexcept { return telemetry; }
 private:
     static double gain(double db) {return juce::Decibels::decibelsToGain(db,-160.0);}
@@ -1017,6 +1061,9 @@ private:
     juce::SmoothedValue<double> autoMakeupDb;
     juce::SmoothedValue<double> widthSmoothed;
     double fs=44100,reduction=0,attenuation=0,power=0;
+    double gateEnvelope=0.0;
+    bool gateOpen=false;
+    int gateHoldRemaining=0;
 };
 }
 
