@@ -370,12 +370,14 @@ public:
 
         const double minVal = slider.getMinimum();
         const double maxVal = slider.getMaximum();
-        const bool isBipolar = (minVal < -0.001 && maxVal > 0.001 && std::abs (minVal + maxVal) < 1.0);
+        const bool isWidth = (cid == "WidthBipolar");
+        const double neutralValue = isWidth ? 100.0 : 0.0;
+        const bool isBipolar = isWidth || (minVal < -0.001 && maxVal > 0.001 && std::abs (minVal + maxVal) < 1.0);
         // Factory FL HEAT bipolar behavior: lights up from 12 o'clock as you move it (Cyan < 0, Yellow/Orange > 0)
         // Unipolar knobs use Yellow/Orange ("SSLYellow") or Blue/Cyan ("SSLBlue")!
         const bool isBlueKnob = (cid == "SSLBlue" || cid == "SSLGreen");
         const Colour accent = isBipolar
-            ? ((slider.getValue() < -0.0001) ? kFLAccentCyan : kFLAccentOrange)
+            ? ((slider.getValue() < neutralValue - 0.0001) ? kFLAccentCyan : kFLAccentOrange)
             : (isBlueKnob ? kFLAccentCyan : kFLAccentOrange);
 
         const int numTicks = 21;
@@ -951,7 +953,7 @@ public:
 
         // TYPE: A (FL HEAT) / TYPE: B (OUTPUT EVEN & ODD) selector button (all uniform size!)
         setupParamBtn  (bHeatByp, "TYPE: A",  "AmberBtn", "heatBypass");
-        setupParamBtn  (bPhase,   String::fromUTF8 ("FASE 180\xc2\xb0"), "RedBtn", "phaseInv");
+        setupParamBtn  (bPhase,   String::fromUTF8 ("\xc3\x98"), "RedBtn", "phaseInv");
         setupParamBtn  (bPad,     "MONO",     "AmberBtn", "pad20");
 
         // Dynamics buttons (Red -> Blue -> Yellow sequence for the 3-button row!)
@@ -960,6 +962,7 @@ public:
         setupParamBtn  (bDynIn,   "COMP SC",  "RedBtn",   "fltDynSc");
         setupParamBtn  (bExpIn,   "GATE ON",  "CyanBtn",  "expIn");
         setupParamBtn  (bCmpIn,   "COMP ON",  "AmberBtn", "cmpIn");
+        setupParamBtn (bAutoMakeup, "AUTO", "AmberBtn", "autoMakeup");
 
         // EQ Bell buttons & Black/Brown curve button (Red -> Blue -> Yellow sequence for the 3-button row!)
         setupParamBtn  (bHfBell,  "BELL",     "RedBtn",   "hfBell");
@@ -975,7 +978,8 @@ public:
         setupParamBtn  (bDsPrePost, "PRE DYN",   "AmberBtn", "dsPrePost");
 
         // Warm -128 dBFS Analog Console Noise button below Mid & Side
-        setupParamBtn  (bAnalog,  "ANALOG",   "AmberBtn", "analogNoise");
+        setupKnob (kStereoSep, "stereoWidth", "WidthBipolar");
+        kStereoSep.setTooltip ("Width: 0% mono, 100% original, 200% wider. No pan or rotation; does not create stereo from mono.");
 
         // OUTPUT Inflate CLIP 0 dB button
         setupParamBtn  (bClip0,   "CLIP 0",   "RedBtn",   "inflateClip");
@@ -1163,7 +1167,8 @@ private:
         // COMPRESSOR Card (y = 198..422)
         kCompRat.setBounds (22, 228, knobSz, knobSz);
         bLink.setBounds    (118, 234, btnW, btnH);
-        kCompThr.setBounds (114, 280, knobSz, knobSz);
+        kCompThr.setBounds (114, 300, knobSz, knobSz);
+        bAutoMakeup.setBounds (118, 260, btnW, btnH);
         kCompRel.setBounds (22, 328, knobSz, knobSz);
 
         // GATE / EXPAND Card (y = 427..712)
@@ -1225,7 +1230,7 @@ private:
         // MID & SIDE dB (from OUTPUT) placed right below De-Esser (y = 745..915) + ANALOG (-128 dB) button!
         kMidDb.setBounds   (214, 772, knobSz, knobSz);
         kSideDb.setBounds  (302, 772, knobSz, knobSz);
-        bAnalog.setBounds  (262, 868, btnW, btnH);
+        kStereoSep.setBounds (262, 845, knobSz, knobSz);
 
         // =====================================================================
         // COLUMN 3 (x = 384..540):
@@ -1522,7 +1527,7 @@ private:
         // MID / SIDE dB Section (from OUTPUT) placed right below De-Esser + ANALOG -128 dB LED!
         drawDialRingAndLabels (g, kMidDb,  {}, "MID dB");
         drawDialRingAndLabels (g, kSideDb, {}, "SIDE dB");
-        drawIndicatorLed (g, 248.0f, 879.0f, 7.2f, kFLAccentOrange, bAnalog.getToggleState());
+        drawDialRingAndLabels (g, kStereoSep, {}, "WIDTH");
 
         // =====================================================================
         // COLUMN 3: INFLATE (ABOVE FADER), MASTER FADER + DUAL L/R GENERAL METER,
@@ -1658,13 +1663,13 @@ private:
     ConsoleDial kLfGain, kLfFreq;
     ConsoleDial kDsFreq, kDsThr;
     ConsoleDial kInfEff, kInfCrv;
-    ConsoleDial kMidDb, kSideDb;
+    ConsoleDial kMidDb, kSideDb, kStereoSep;
     MasterFader fader;
 
     TextButton bHeatByp, bPhase, bPad;
-    TextButton bLink, bExpSel, bDynIn, bExpIn, bCmpIn;
+    TextButton bLink, bExpSel, bDynIn, bExpIn, bCmpIn, bAutoMakeup;
     TextButton bHfBell, bEqSel, bLfBell, bEqIn, bEqSc, bEqPre;
-    TextButton bDsType, bDsMode, bDsPrePost, bAnalog;
+    TextButton bDsType, bDsMode, bDsPrePost;
     TextButton bClip0, bInOutMeter, bMeterScale;
 
     bool showPreHeatInputMeter = false;

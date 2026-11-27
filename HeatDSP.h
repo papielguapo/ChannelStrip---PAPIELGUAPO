@@ -63,6 +63,8 @@ public:
             2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true); // 4x
         oversamplers[2] = std::make_unique<juce::dsp::Oversampling<float>> (
             2, 3, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true); // 8x
+        for (auto& os : oversamplers)
+            os->setUsingIntegerLatency (true);
     }
 
     void prepare (double sampleRate, int maxBlockSize)

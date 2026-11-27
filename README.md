@@ -1,5 +1,27 @@
 # ChannelStrip — papielguapo (VST3 Windows x64)
 
+## Actualización 2026-11-27
+
+Esta versión continúa la rama `papielguapo-mono-btn-and-input-led`, conserva su skin metálica vectorial y el botón MONO. El botón de inversión de polaridad se identifica como **Ø**.
+
+- **AUTO** debajo de EXT SC: makeup estimado del compresor, apagado por defecto, suavizado de 100 ms y máximo +18 dB. El ataque de compresor/gate sigue fijo en 0,1 ms.
+- **WIDTH** sustituye a ANALOG: 0 % mono, 100 % original, 200 % mayor anchura mediante matriz Mid/Side simétrica, sin retardos ni rotación/paneo añadido. Una fuente mono sigue siendo mono. El arco parte del centro: azul por debajo del 100 %, amarillo por encima. Los knobs MID/SIDE siguen actuando independientemente.
+- HEAT declara su latencia entera al host y mantiene el procesamiento al llevar Drive a cero para completar el suavizado. El detector externo usa todos sus canales a través del filtrado/EQ de sidechain.
+- Se conservan los IDs de parámetros anteriores; Analog Noise y los generadores estéreo experimentales quedan inactivos. La instalación de Windows debe actualizarse aparte si Program Files deniega la escritura.
+
+Pruebas reproducibles tras compilar Release (Python con `numpy` y `pedalboard`):
+
+```powershell
+python tests/test_width.py
+python tests/test_makeup.py
+python tests/test_heat.py
+```
+
+Las pruebas cubren MONO, matriz WIDTH y simetría L/R, ausencia de impulsos retardados, makeup y suavizado, transparencia nativa y latencia en 1x/2x/4x/8x.
+
+La descripción histórica siguiente documenta etapas anteriores; esta actualización sustituye sus referencias a ANALOG y PAD -20 dB.
+
+
 ![Interfaz ChannelStrip FL HEAT](docs/ChannelStrip_FL_Heat_UI.png)
 
 **ChannelStrip** es un plugin VST3 nativo en C++17 / JUCE para Windows x64 desarrollado por **papielguapo**, diseñado con la estética oscura **FL HEAT** (`#262a2e` / `#1e2124` con arcos luminosos naranja `#ff9e2c` y azul cian `#42a5f5`) y la firma vectorial original de `OUTPUT`. Combina en una sola tira de canal de 3 columnas los motores DSP de tus plugins **FL HEAT**, **Vocals** y **OUTPUT**, junto con una sección de dinámica y ecualización estilo Serie E.

@@ -18,7 +18,7 @@ enum Param {
     dsFreq, dsThresh, dsScFilter, dsAudioMode, dsMonitor, dsPrePost,
     heatDrive, heatTone, heatBypass, evenHarmonics, oddHarmonics, midGain, sideGain,
     inflateEffect, inflateCurve, inflateClip, oversampling, analogNoise,
-    meterInOutParam, meterScaleParam, count
+    meterInOutParam, meterScaleParam, autoMakeup, stereoCreate, stereoSeparation, stereoWidth, count
 };
 
 constexpr const char* ids[] = {
@@ -31,7 +31,7 @@ constexpr const char* ids[] = {
     "dsFreq","dsThresh","dsScFilter","dsAudioMode","dsMonitor","dsPrePost",
     "heatDrive","heatTone","heatBypass","evenHarmonics","oddHarmonics","midGain","sideGain",
     "inflateEffect","inflateCurve","inflateClip","oversampling","analogNoise",
-    "meterInOut","meterScale"
+    "meterInOut","meterScale","autoMakeup","stereoCreate","stereoSeparation","stereoWidth"
 };
 static_assert (std::size (ids) == count);
 
@@ -134,6 +134,10 @@ State::ParameterLayout layout()
     flag (analogNoise,       "Analog Noise",         false);
     flag (meterInOutParam,   "Meter In / Out",       false);
     flag (meterScaleParam,   "Meter Scale (-18 VU)", false);
+    flag (autoMakeup, "Auto Makeup", false);
+    flag (stereoCreate, "Stereo Create (legacy, inactive)", false);
+    add (stereoSeparation, "Stereo Separation (legacy, inactive)", -100, 100, 0, "%");
+    add (stereoWidth, "Stereo Width", 0, 200, 100, "%");
 
     return result;
 }
@@ -593,6 +597,10 @@ public:
         trim.setCurrentAndTargetValue(gain(raw[preamp]->load()));
         heat.setCurrentAndTargetValue(gain(raw[drive]->load())-1);
         output.setCurrentAndTargetValue(outputGain(raw[fader]->load(),raw[compMakeup]->load()));
+        autoMakeupDb.reset(rate, 0.100);
+        autoMakeupDb.setCurrentAndTargetValue(0.0);
+        widthSmoothed.reset(rate, 0.030);
+        widthSmoothed.setCurrentAndTargetValue(raw[stereoWidth]->load() * 0.01);
         evenSmoothed.setCurrentAndTargetValue(juce::roundToInt(raw[evenHarmonics]->load()) * 0.01f);
         oddSmoothed.setCurrentAndTargetValue(juce::roundToInt(raw[oddHarmonics]->load()) * 0.01f);
         midSmoothed.setCurrentAndTargetValue(juce::Decibels::decibelsToGain(raw[midGain]->load()));
@@ -600,6 +608,8 @@ public:
         inflator.prepare(rate);
         inflator.effectCurrent = raw[inflateEffect]->load() / 100.0;
         inflator.curveCurrent  = (raw[inflateCurve]->load() + 50.0) / 100.0;
+        setLatencySamples (raw[heatBypass]->load() > 0.5f ? 0
+            : flHeatDsp.getLatencySamples (juce::jlimit (0, 3, int (raw[oversampling]->load()))));
     }
     void reset() override
     {
@@ -665,7 +675,11 @@ public:
         const bool  evenOddMode = v[heatBypass] > 0.5f;
         const int   osMode     = juce::jlimit(0, 3, int(v[oversampling]));
         flHeatDsp.setParameters(hDrive, hTone, evenOddMode, osMode);
-        if (!evenOddMode && std::abs(hDrive) > 0.001f)
+        const int latency = evenOddMode ? 0 : flHeatDsp.getLatencySamples (osMode);
+        if (getLatencySamples() != latency)
+            setLatencySamples (latency);
+        // Keep processing at zero drive so smoothing and the oversampling delay continue.
+        if (!evenOddMode)
             flHeatDsp.processBlock(main);
         evenSmoothed.setTargetValue(evenOddMode ? (juce::roundToInt(v[evenHarmonics]) * 0.01f) : 0.0f);
         oddSmoothed.setTargetValue(evenOddMode  ? (juce::roundToInt(v[oddHarmonics])  * 0.01f) : 0.0f);
@@ -765,6 +779,11 @@ public:
         const bool dynNeedsDetector = cmpActive || expActive;
         // At 20:0 (compRatio >= 19.95), full limiting slope (1.0); from 1:1 to <20:0, standard ratio 1 - 1/R
         const double compRatioInv = (v[compRatio] >= 19.95f) ? 1.0 : (1.0 - 1.0 / double(v[compRatio]));
+        // Conservative static makeup estimate: half the nominal reduction at 0 dBFS.
+        // It depends only on compressor settings, never on gate or sidechain level.
+        autoMakeupDb.setTargetValue(v[autoMakeup] > 0.5f && cmpActive
+            ? std::clamp(-double(v[compThreshold]) * compRatioInv * 0.5, 0.0, 18.0)
+            : 0.0);
         const double compThrLin   = juce::Decibels::decibelsToGain(double(v[compThreshold]), -160.0);
         const double gateThrLin   = juce::Decibels::decibelsToGain(double(v[gateThreshold]), -160.0);
         const float dsF = v[dsFreq];
@@ -779,7 +798,7 @@ public:
         const double targetInfEffect = double(v[inflateEffect]) / 100.0;
         const double targetInfCurve  = (double(v[inflateCurve]) + 50.0) / 100.0;
         const bool clip0dB           = v[inflateClip] > 0.5f;
-        const bool analogOn          = v[analogNoise] > 0.5f;
+        widthSmoothed.setTargetValue(v[stereoWidth] * 0.01);
         const bool msActive          = (std::abs(v[midGain]) > 0.001f || std::abs(v[sideGain]) > 0.001f
                                      || midSmoothed.isSmoothing() || sideSmoothed.isSmoothing());
 
@@ -848,11 +867,10 @@ public:
             double dynGain = 1.0;
             if (dynNeedsDetector || reduction > 1.0e-5 || attenuation > 1.0e-5)
             {
-                for(int ch=0;ch<channels;++ch)
+                const int detectorChannels = external ? sc.getNumChannels() : channels;
+                for(int ch=0;ch<detectorChannels;++ch)
                 {
-                    double det = external
-                               ? double(sc.getSample(std::min(ch, sc.getNumChannels() - 1), i))
-                               : x[ch];
+                    double det = external ? double(sc.getSample(ch,i)) : x[ch];
                     if (fltInSc)
                     {
                         if (on[0]) det=scHpSlope.tick(ch,det);
@@ -890,11 +908,12 @@ public:
                     dynGain = gain(-totalGrDb);
             }
             const auto faderGain = output.getNextValue();
+            const double makeupGain = gain(autoMakeupDb.getNextValue());
 
             double outCh[2]{};
             for (int ch=0;ch<channels;++ch)
             {
-                double y = dynGain * x[ch];
+                double y = dynGain * makeupGain * x[ch];
                 if (!fltPre)
                 {
                     if (on[0]) y=hpSlope.tick(ch,y);
@@ -915,12 +934,14 @@ public:
 
             // 1:1 OUTPUT Sculp Mid/Side Matrix:
             // float mid=(l+r)*.5f*v[3], side=(l-r)*.5f*v[4]; l=mid+side; r=mid-side;
-            if (msActive)
+            // Symmetric M/S width: 0% mono, 100% original, 200% wider. No pan, rotation or delay.
+            const double width = widthSmoothed.getNextValue();
+            if (msActive || std::abs(width - 1.0) > 1.0e-9)
             {
                 const float l = static_cast<float>(outCh[0]);
                 const float r = static_cast<float>((channels >= 2) ? outCh[1] : outCh[0]);
                 const float mid  = (l + r) * 0.5f * mGain;
-                const float side = (l - r) * 0.5f * sGain;
+                const float side = static_cast<float>((l - r) * 0.5 * sGain * width);
                 outCh[0] = static_cast<double>(mid + side);
                 if (channels >= 2)
                     outCh[1] = static_cast<double>(mid - side);
@@ -929,8 +950,6 @@ public:
             for (int ch=0;ch<channels;++ch)
             {
                 double y = outCh[ch];
-                if (analogOn)
-                    y = warmNoise.processSample(ch, y);
                 if (targetInfEffect > 0.0001 || inflator.effectCurrent > 0.0001 || clip0dB)
                     y = inflator.processSample(y, inflator.curveCurrent, inflator.effectCurrent, clip0dB);
                 // Master Fader Out is the VERY LAST stage before the OUT meter!
@@ -995,6 +1014,8 @@ private:
     OutputInflator inflator{};
     WarmAnalogNoise warmNoise{};
     juce::SmoothedValue<double> trim,output,heat,midSmoothed,sideSmoothed,evenSmoothed,oddSmoothed;
+    juce::SmoothedValue<double> autoMakeupDb;
+    juce::SmoothedValue<double> widthSmoothed;
     double fs=44100,reduction=0,attenuation=0,power=0;
 };
 }
